@@ -829,10 +829,10 @@ public class Home extends Activity {
 
     static final int RAIL = 72;   // dp
 
-    /** The app's name, written like the project banner: Anant in white, Play in the accent red. */
+    /** The app's name, written like the project banner: Stream in white, Hub in the accent blue. */
     TextView brand(float size) {
         TextView name = text("", size, TEXT, true);
-        android.text.SpannableString s = new android.text.SpannableString("AnantPlay");
+        android.text.SpannableString s = new android.text.SpannableString("StreamHub");
         s.setSpan(new android.text.style.ForegroundColorSpan(ACCENT), 5, 9, 0);
         name.setText(s);
         name.setSingleLine();
@@ -2029,12 +2029,12 @@ public class Home extends Activity {
         why.setVisibility(secOpen ? View.VISIBLE : View.GONE);
         secBox.addView(why);
         secBox.addView(settingRow(R.drawable.ic_heart, "Buy Me a Coffee", "buymeacoffee.com/rohit267", null, v -> openLink("https://buymeacoffee.com/rohit267")));
-        secBox.addView(settingRow(R.drawable.ic_heart, "PayPal", "paypal.me/champdev", null, v -> openLink("https://paypal.me/champdev")));
+        secBox.addView(settingRow(R.drawable.ic_heart, "PayPal", "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
 
         section(App.t(R.string.home_about), R.drawable.ic_info, true);
-        secBox.addView(settingRow(R.drawable.ic_language, App.t(R.string.home_about_site), "anantplay.github.io/android", null, v -> openLink("https://anantplay.github.io/android/")));
-        secBox.addView(settingRow(R.drawable.ic_code, App.t(R.string.home_about_source), "github.com/AnantPlay/android", null, v -> openLink("https://github.com/AnantPlay/android")));
-        secBox.addView(settingRow(R.drawable.ic_info, App.t(R.string.home_about_bug), "github.com/AnantPlay/android/issues", null, v -> openLink("https://github.com/AnantPlay/android/issues")));
+        secBox.addView(settingRow(R.drawable.ic_language, App.t(R.string.home_about_site), "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
+        secBox.addView(settingRow(R.drawable.ic_code, App.t(R.string.home_about_source), "github.com/StreamHub/android", null, v -> openLink("https://github.com/StreamHub/android")));
+        secBox.addView(settingRow(R.drawable.ic_info, App.t(R.string.home_about_bug), "github.com/StreamHub/android/issues", null, v -> openLink("https://github.com/StreamHub/android/issues")));
         TextView about = text(App.t(App.tv ? R.string.home_about_tv : R.string.home_about_phone, ver), sp(12, 11), MUTED, false);
         about.setPadding(u(52, 50), dp(6), dp(14), dp(12));
         about.setVisibility(secOpen ? View.VISIBLE : View.GONE);
@@ -2768,7 +2768,7 @@ public class Home extends Activity {
         col.addView(h);
     }
 
-    /** Once, after an update from AnantPlay: the new name, and where the sites and channels went. */
+    /** Once, after an update from StreamHub: the new name, and where the sites and channels went. */
     void sourcesNotice() {
         if (!App.prefs.getBoolean("sourcesNotice", false)) return;
         App.prefs.edit().putBoolean("sourcesNotice", false).apply();
