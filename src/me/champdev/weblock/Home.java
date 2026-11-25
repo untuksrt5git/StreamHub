@@ -2729,7 +2729,7 @@ public class Home extends Activity {
     /** Catalog built from the user's own locally indexed websites, not from the inherited public catalog. */
     void indexedCatalogTab() {
         col.addView(heading("KATALOG VIDEO"));
-        TextView intro = text("Poster dan judul diambil otomatis dari halaman website. Ketuk kartu untuk membuka sumber pemutar; alamat sumber tetap mengikuti domain embed yang ditemukan.", sp(14, 12), MUTED, false);
+        TextView intro = text("Kartu dikelompokkan menurut domain pemutar yang benar-benar ditemukan di iframe, bukan nama website induk yang menanamkannya.", sp(14, 12), MUTED, false);
         intro.setPadding(0, 0, 0, dp(12));
         col.addView(intro);
         List<Sites.Site> sites = Sites.favorites();
@@ -2737,43 +2737,61 @@ public class Home extends Activity {
             col.addView(note("Belum ada website. Tambahkan website dari tab Beranda."));
             return;
         }
-        int total = 0;
+
+        // A page on OMG can embed a player hosted by Bingr (or another provider). Attribute each card to
+        // the iframe's own host, while retaining the parent page URL only as fallback metadata.
+        Map<String, List<org.json.JSONObject>> byOrigin = new java.util.LinkedHashMap<>();
         for (Sites.Site site : sites) {
             String fileName = site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile;
             try {
                 org.json.JSONObject root = new org.json.JSONObject(Sources.read(new File(getFilesDir(), fileName)));
                 org.json.JSONArray videos = root.optJSONArray("videos");
-                if (videos == null || videos.length() == 0) continue;
-                col.addView(heading(site.name, String.valueOf(videos.length())));
-                LinearLayout row = null;
-                int inRow = 0;
-                int columns = App.tv ? 4 : 2;
-                for (int i = 0; i < videos.length(); i++) {
+                for (int i = 0; videos != null && i < videos.length(); i++) {
                     org.json.JSONObject video = videos.optJSONObject(i);
                     if (video == null) continue;
-                    String title = video.optString("title", "Video");
-                    String poster = video.optString("poster", "");
-                    String embedUrl = video.optString("embedUrl", "");
-                    String pageUrl = video.optString("pageUrl", site.currentUrl.isEmpty() ? site.url : site.currentUrl);
-                    String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
-                    if (playUrl.isEmpty()) continue;
-                    if (row == null || inRow >= columns) {
-                        row = new LinearLayout(this);
-                        row.setOrientation(LinearLayout.HORIZONTAL);
-                        row.setGravity(Gravity.TOP);
-                        col.addView(row);
-                        inRow = 0;
-                    }
-                    row.addView(indexedVideoCard(title, poster, playUrl, pageUrl), new LinearLayout.LayoutParams(0, -2, 1));
-                    inRow++;
-                    total++;
-                }
-                if (row != null && inRow < columns) {
-                    while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+                    String embed = video.optString("embedUrl", "");
+                    String origin = video.optString("sourceHost", "");
+                    try {
+                        String actual = Uri.parse(embed).getHost();
+                        if (actual != null && !actual.isEmpty()) origin = actual.replaceFirst("(?i)^www\\\\.", "").toLowerCase(java.util.Locale.ROOT);
+                    } catch (Exception ignored) { }
+                    if (origin.isEmpty()) origin = site.name;
+                    if (!byOrigin.containsKey(origin)) byOrigin.put(origin, new ArrayList<>());
+                    byOrigin.get(origin).add(video);
                 }
             } catch (Exception ignored) { }
         }
-        if (total == 0) col.addView(note("Belum ditemukan pasangan halaman video dan embed. Jalankan Pindai ulang website agar indeks video terbaru dibuat."));
+
+        int total = 0;
+        for (Map.Entry<String, List<org.json.JSONObject>> group : byOrigin.entrySet()) {
+            List<org.json.JSONObject> videos = group.getValue();
+            col.addView(heading(group.getKey(), String.valueOf(videos.size())));
+            LinearLayout row = null;
+            int inRow = 0;
+            int columns = App.tv ? 4 : 2;
+            for (org.json.JSONObject video : videos) {
+                String title = video.optString("title", "Video");
+                String poster = video.optString("poster", "");
+                String embedUrl = video.optString("embedUrl", "");
+                String pageUrl = video.optString("pageUrl", "");
+                String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
+                if (playUrl.isEmpty()) continue;
+                if (row == null || inRow >= columns) {
+                    row = new LinearLayout(this);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setGravity(Gravity.TOP);
+                    col.addView(row);
+                    inRow = 0;
+                }
+                row.addView(indexedVideoCard(title, poster, playUrl, pageUrl), new LinearLayout.LayoutParams(0, -2, 1));
+                inRow++;
+                total++;
+            }
+            if (row != null && inRow < columns) {
+                while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+            }
+        }
+        if (total == 0) col.addView(note("Belum ditemukan pasangan halaman video dan embed. Buka website lalu pilih Pindai ulang agar indeks video terbaru dibuat. Jika website memuat daftar lewat JavaScript, indeks HTML statis mungkin tidak dapat mengambil poster atau judulnya."));
     }
 
     View indexedVideoCard(String title, String poster, String playUrl, String pageUrl) {
