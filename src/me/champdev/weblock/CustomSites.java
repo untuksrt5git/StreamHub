@@ -72,7 +72,7 @@ final class CustomSites {
                     JSONObject idx = new JSONObject().put("version", 1).put("updatedAt", System.currentTimeMillis())
                         .put("sources", indexSources);
                     atomicWrite(new File(app.getFilesDir(), "user-index.json"), idx.toString(2));
-                    renameFavorite(address, item.optString("name"));
+                    renameFavorite(address, item.optString("name"), item.optString("currentUrl"), item.optString("indexFile"));
                 }
             } catch (Exception ignored) { }
             if (callback != null) {
@@ -122,7 +122,7 @@ final class CustomSites {
                                     .put("lastIndexedAt", now).put("lastCheckedAt", now)
                                     .put("domainChanged", beforeHost != null && afterHost != null && !beforeHost.equalsIgnoreCase(afterHost));
                                 item = fresh;
-                                renameFavorite(original, fresh.optString("name"));
+                                renameFavorite(original, fresh.optString("name"), fresh.optString("currentUrl"), fresh.optString("indexFile"));
                                 refreshed++;
                             } catch (Exception ignored) { }
                         }
@@ -231,12 +231,15 @@ final class CustomSites {
         if (f.exists() && !f.delete()) throw new java.io.IOException("replace failed");
         if (!tmp.renameTo(f)) throw new java.io.IOException("rename failed");
     }
-    private static void renameFavorite(String url, String name) throws Exception {
-        if (name == null || name.isEmpty()) return;
+    private static void renameFavorite(String url, String name, String currentUrl, String indexFile) throws Exception {
         JSONArray a = new JSONArray(App.prefs.getString("favs", "[]")), out = new JSONArray();
         for (int i=0;i<a.length();i++) {
             JSONObject o = a.getJSONObject(i);
-            if (url.equals(o.optString("url"))) o.put("name", name);
+            if (url.equals(o.optString("url"))) {
+                if (name != null && !name.isEmpty()) o.put("name", name);
+                if (currentUrl != null && !currentUrl.isEmpty()) o.put("currentUrl", currentUrl);
+                if (indexFile != null && !indexFile.isEmpty()) o.put("indexFile", indexFile);
+            }
             out.put(o);
         }
         App.prefs.edit().putString("favs", out.toString()).apply();
