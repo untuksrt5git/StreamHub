@@ -182,7 +182,7 @@ final class CustomSites {
         JSONObject o = new JSONObject();
         try {
             o.put("id", id(address)).put("name", clean(name)).put("url", address).put("currentUrl", finalUrl)
-             .put("canonicalUrl", absolute(finalUrl, match(html, "(?is)<link[^>]+rel=[\\"\x27]canonical[\\"\x27][^>]+href=[\\"\x27]([^\\"\x27]+)")))
+             .put("canonicalUrl", absolute(finalUrl, match(html, "(?is)<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)")))
              .put("icon", icon).put("description", clean(description)).put("category", "website")
              .put("tags", new JSONArray().put("custom")).put("aliases", new JSONArray())
              .put("autoUpdate", true).put("metadataFetched", !html.isEmpty())
