@@ -2747,8 +2747,16 @@ public class Home extends Activity {
             labels.add(title + "  ·  " + kind);
             urls.add(p.optString("url"));
         }
+        org.json.JSONArray embedLinks = root.optJSONArray("embeds");
+        for (int i = 0; embedLinks != null && i < embedLinks.length(); i++) {
+            String embed = embedLinks.optString(i);
+            if (embed.startsWith("http")) {
+                labels.add("Buka pemutar video  ·  " + Uri.parse(embed).getHost());
+                urls.add(embed);
+            }
+        }
         int media = root.optJSONArray("media") == null ? 0 : root.optJSONArray("media").length();
-        int embeds = root.optJSONArray("embeds") == null ? 0 : root.optJSONArray("embeds").length();
+        int embeds = embedLinks == null ? 0 : embedLinks.length();
         new AlertDialog.Builder(this).setTitle("Indeks: " + site.name)
             .setMessage(labels.size() + " halaman · " + media + " file media · " + embeds + " embed video")
             .setItems(labels.toArray(new String[0]), (dialog, which) -> {
