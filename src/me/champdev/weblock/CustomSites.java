@@ -132,6 +132,16 @@ final class CustomSites {
                 try {
                     root.put("version", 1).put("updatedAt", now).put("sites", updated);
                     atomicWrite(file, root.toString(2));
+                    JSONArray refs = new JSONArray().put(new JSONObject().put("type", "custom-sites").put("url", "custom-sites.json"));
+                    for (int i = 0; i < updated.length(); i++) {
+                        JSONObject entry = updated.optJSONObject(i);
+                        if (entry == null || entry.optString("indexFile").isEmpty()) continue;
+                        refs.put(new JSONObject().put("type", "site-pages").put("siteId", entry.optString("id"))
+                            .put("name", entry.optString("name")).put("websiteUrl", entry.optString("url"))
+                            .put("url", entry.optString("indexFile")));
+                    }
+                    JSONObject manifest = new JSONObject().put("version", 1).put("updatedAt", now).put("sources", refs);
+                    atomicWrite(new File(app.getFilesDir(), "user-index.json"), manifest.toString(2));
                 } catch (Exception ignored) { }
             }
         });
@@ -172,7 +182,7 @@ final class CustomSites {
         JSONObject o = new JSONObject();
         try {
             o.put("id", id(address)).put("name", clean(name)).put("url", address).put("currentUrl", finalUrl)
-             .put("canonicalUrl", match(html, "(?is)<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)"))
+             .put("canonicalUrl", absolute(finalUrl, match(html, "(?is)<link[^>]+rel=[\\"\x27]canonical[\\"\x27][^>]+href=[\\"\x27]([^\\"\x27]+)")))
              .put("icon", icon).put("description", clean(description)).put("category", "website")
              .put("tags", new JSONArray().put("custom")).put("aliases", new JSONArray())
              .put("autoUpdate", true).put("metadataFetched", !html.isEmpty())
