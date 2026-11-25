@@ -1,8 +1,8 @@
 <resources>
     <string name="warp_dns_title">WARP DNS</string>
-    <string name="warp_dns_help">Which DNS WARP asks for Cloudflare\'s address. Automatic works on most networks; if WARP says it cannot connect, type your internet provider\'s DNS.</string>
+    <string name="warp_dns_help">DNS servers used inside the WARP tunnel and during its connection setup. Enter one or more IPv4/IPv6 addresses; automatic uses Cloudflare DNS.</string>
     <string name="warp_dns_hint">DNS server addresses, comma separated, for example 87.101.204.72</string>
     <string name="warp_dns_auto">Automatic</string>
     <string name="warp_dns_save">Save</string>
-    <string name="warp_dns_msg">Where WARP looks up Cloudflare. Your provider\'s DNS addresses are on your router\'s status page. Leave empty for Automatic (your network\'s DNS plus public ones).</string>
+    <string name="warp_dns_msg">These IP addresses are used by WARP for DNS lookups while the tunnel is active. Separate multiple addresses with commas. Leave empty to use Cloudflare DNS. DNS requests to custom servers are not encrypted unless the resolver itself provides encryption.</string>
 </resources>
