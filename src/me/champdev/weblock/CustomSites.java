@@ -98,7 +98,7 @@ final class CustomSites {
         String iconPath = match(html, "(?is)<link[^>]+rel=[\\"'][^>]*icon[^>]*href=[\\"']([^\\"']+)");
         if (iconPath.isEmpty()) iconPath = "/favicon.ico";
         String icon;
-        try { icon = new URL(u.toString(), iconPath).toString(); }
+        try { icon = new URL(new URL(u.toString()), iconPath).toString(); }
         catch (Exception e) { icon = u.getScheme() + "://" + host + "/favicon.ico"; }
         JSONObject o = new JSONObject();
         try {
