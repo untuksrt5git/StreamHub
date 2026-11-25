@@ -39,7 +39,7 @@ final class WebsiteIndexer {
     private static final Pattern MEDIA_TAG = Pattern.compile("(?is)<(?:video|source)\\b([^>]*)>");
     private static final Pattern SRC = Pattern.compile("(?is)\\bsrc\\s*=\\s*(['\\\"])(.*?)\\1");
     private static final Pattern CANONICAL = Pattern.compile("(?is)<link\\b([^>]*rel\\s*=\\s*(['\\\"])canonical\\2[^>]*)>");
-    private static final Pattern SKIP = Pattern.compile("(?i)(login|logout|register|signup|account|profile|privacy|terms|contact|about|javascript:|mailto:|tel:|\.pdf$|\\.(jpg|jpeg|png|gif|webp|css|js|woff2?|ttf|svg|ico)$)");
+    private static final Pattern SKIP = Pattern.compile("(?i)(login|logout|register|signup|account|profile|privacy|terms|contact|about|javascript:|mailto:|tel:|\\.pdf$|\\.(jpg|jpeg|png|gif|webp|css|js|woff2?|ttf|svg|ico)$)");
 
     private WebsiteIndexer() { }
 
@@ -67,6 +67,7 @@ final class WebsiteIndexer {
                 Page page = fetch(task.url);
                 checked++;
                 if (page == null) { failed++; continue; }
+                if (task.depth == 0) rootHost = host(new URL(page.url).getHost()); // follow a site's redirect before crawling its new domain
 
                 JSONObject entry = new JSONObject();
                 entry.put("url", page.url).put("title", page.title.isEmpty() ? label(page.url) : page.title)
