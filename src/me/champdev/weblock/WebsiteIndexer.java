@@ -166,13 +166,17 @@ final class WebsiteIndexer {
             p.url = c.getURL().toString();
             p.title = clean(first(TITLE, html));
             p.ogTitle = meta(html, "og:title");
+            if (p.ogTitle.isEmpty()) p.ogTitle = jsonLd(html, "name");
             p.heading = clean(first(H1, html));
             p.siteName = meta(html, "og:site_name");
             p.logo = logo(html, p.url);
+            if (p.logo.isEmpty()) p.logo = absolute(p.url, jsonLd(html, "logo"));
             p.description = meta(html, "description");
             if (p.description.isEmpty()) p.description = meta(html, "og:description");
             p.poster = absolute(p.url, meta(html, "og:image"));
             if (p.poster.isEmpty()) p.poster = absolute(p.url, meta(html, "twitter:image"));
+            if (p.poster.isEmpty()) p.poster = absolute(p.url, jsonLd(html, "image"));
+            if (p.poster.isEmpty()) p.poster = videoPoster(html, p.url);
             if (!goodPoster(p.poster)) p.poster = "";
             p.links.addAll(links(html));
             p.media.addAll(media(html, p.url));
@@ -217,6 +221,60 @@ final class WebsiteIndexer {
             return p;
         } catch (Exception ignored) { return null; }
         finally { if (c != null) c.disconnect(); }
+    }
+
+    /** Read Schema.org JSON-LD fields (including nested ImageObject url values). */
+    private static String jsonLd(String html, String wanted) {
+        Matcher scripts = Pattern.compile("(?is)<script\\\\b[^>]*type\\\\s*=\\\\s*(['\\\"])[^'\\\"]*ld\\\\+json[^'\\\"]*\\\\1[^>]*>(.*?)</script\\\\s*>").matcher(html);
+        while (scripts.find()) {
+            try {
+                String value = jsonLdValue(new JSONObject(scripts.group(2)), wanted, 0);
+                if (!value.isEmpty()) return value;
+            } catch (Exception ignored) { }
+        }
+        return "";
+    }
+
+    private static String jsonLdValue(Object node, String wanted, int depth) {
+        if (node == null || depth > 8) return "";
+        if (node instanceof JSONObject) {
+            JSONObject object = (JSONObject) node;
+            Object value = object.opt(wanted);
+            if (value instanceof String && !((String) value).isEmpty()) return (String) value;
+            if (value instanceof JSONObject) {
+                JSONObject image = (JSONObject) value;
+                String url = image.optString("url", image.optString("contentUrl", ""));
+                if (!url.isEmpty()) return url;
+            }
+            if (value instanceof JSONArray) {
+                String found = jsonLdValue(value, wanted, depth + 1);
+                if (!found.isEmpty()) return found;
+            }
+            java.util.Iterator<String> keys = object.keys();
+            while (keys.hasNext()) {
+                String found = jsonLdValue(object.opt(keys.next()), wanted, depth + 1);
+                if (!found.isEmpty()) return found;
+            }
+        } else if (node instanceof JSONArray) {
+            JSONArray array = (JSONArray) node;
+            for (int i = 0; i < array.length(); i++) {
+                String found = jsonLdValue(array.opt(i), wanted, depth + 1);
+                if (!found.isEmpty()) return found;
+            }
+        }
+        return "";
+    }
+
+    private static String videoPoster(String html, String base) {
+        Matcher tags = MEDIA_TAG.matcher(html);
+        while (tags.find()) {
+            String value = attr(tags.group(1), "poster");
+            if (!value.isEmpty()) {
+                String absolute = absolute(base, value);
+                if (goodPoster(absolute)) return absolute;
+            }
+        }
+        return "";
     }
 
     private static String logo(String html, String base) {
