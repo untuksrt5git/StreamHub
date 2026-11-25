@@ -105,8 +105,12 @@ final class CustomSites {
                     if (old == null) continue;
                     JSONObject item = old;
                     long last = old.optLong("lastIndexedAt", 0);
+                    // Version 2 enriches iframe pages with their own title/poster/logo. Upgrade older cached indexes once.
+                    String oldIndexName = old.optString("indexFile", WebsiteIndexer.fileName(old.optString("id")));
+                    JSONObject oldIndex = read(new File(app.getFilesDir(), oldIndexName));
+                    boolean needsMetadataUpgrade = oldIndex.optInt("version", 0) < 2;
                     if (refreshed < 3 && old.optBoolean("autoUpdate", true) &&
-                            now - last > 24L * 3600 * 1000) {
+                            (needsMetadataUpgrade || now - last > 24L * 3600 * 1000)) {
                         String original = old.optString("url");
                         JSONObject fresh = metadata(original);
                         if (fresh.optBoolean("metadataFetched")) {
