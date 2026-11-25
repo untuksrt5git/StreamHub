@@ -135,6 +135,7 @@ public class Home extends Activity {
         if (tabs() && state == null) tab = 0;
         setContentView(withNav(sv));
         Warp.listeners.add(warpChanged);
+        CustomSites.refresh(this);   // quietly refresh user website indexes and follow working redirects
 
         // Once per install: an update from a version with built-in sources gets them added (Sources.migrate), then a notice
         if (!App.prefs.contains("sourcesVersion")) Warp.whenSettled(() -> App.io.execute(() -> { if (Sources.migrate()) runOnUiThread(this::build); }));
@@ -2717,6 +2718,13 @@ public class Home extends Activity {
             List<Runnable> actions = new ArrayList<>();
             items.add(App.t(Sites.isFavorite(s.url) ? R.string.home_remove_favorite : R.string.home_add_favorite));
             actions.add(() -> { Sites.toggleFavorite(s); build(); });
+            File indexFile = new File(getFilesDir(), WebsiteIndexer.fileName(CustomSites.id(s.url)));
+            if (indexFile.exists()) {
+                items.add("Lihat hasil indeks website");
+                actions.add(() -> showSiteIndex(s));
+                items.add("Pindai ulang website");
+                actions.add(() -> CustomSites.add(this, s.url, message -> { toast(message); build(); }));
+            }
             for (String m : s.mirrors) {
                 items.add(App.t(R.string.home_open_mirror, Uri.parse(m).getHost()));
                 actions.add(() -> startActivity(WebActivity.open(this, s.name, m, m)));
@@ -2727,6 +2735,37 @@ public class Home extends Activity {
         });
         if (firstCard == null) firstCard = card;
         return card;
+    }
+
+    /** Opens the local JSON index as a browsable list of pages found on the user's site. */
+    void showSiteIndex(Sites.Site site) {
+        File file = new File(getFilesDir(), WebsiteIndexer.fileName(CustomSites.id(site.url)));
+        org.json.JSONObject root = new org.json.JSONObject(Sources.read(file));
+        org.json.JSONArray pages = root.optJSONArray("pages");
+        if (pages == null || pages.length() == 0) {
+            new AlertDialog.Builder(this).setTitle("Indeks website")
+                .setMessage("Belum ada halaman yang berhasil dipindai. Coba Pindai ulang; beberapa situs membutuhkan JavaScript atau login.")
+                .setPositiveButton(android.R.string.ok, null).show();
+            return;
+        }
+        List<String> labels = new ArrayList<>();
+        List<String> urls = new ArrayList<>();
+        for (int i = 0; i < pages.length(); i++) {
+            org.json.JSONObject p = pages.optJSONObject(i);
+            if (p == null) continue;
+            String title = p.optString("title", p.optString("url"));
+            String kind = p.optString("kind", "page");
+            labels.add(title + "  ·  " + kind);
+            urls.add(p.optString("url"));
+        }
+        int media = root.optJSONArray("media") == null ? 0 : root.optJSONArray("media").length();
+        new AlertDialog.Builder(this).setTitle("Indeks: " + site.name)
+            .setMessage(labels.size() + " halaman ditemukan · " + media + " tautan media")
+            .setItems(labels.toArray(new String[0]), (dialog, which) -> {
+                if (which >= 0 && which < urls.size() && !urls.get(which).isEmpty())
+                    startActivity(WebActivity.open(this, site.name, site.url, urls.get(which)));
+            }).setNeutralButton("Buka beranda", (dialog, which) -> openSite(site))
+            .setPositiveButton(android.R.string.ok, null).show();
     }
 
     /** What tapping a site card does; the title page overrides it to search for the title there. */
@@ -2809,7 +2848,7 @@ public class Home extends Activity {
     void addSiteDialog() {
         EditText in = WebActivity.field(this, "https://example.com", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Tambah website ke StreamHub")
-            .setMessage("Masukkan alamat website. StreamHub menyimpan alamat, mengambil nama dan ikon jika tersedia, lalu menambahkannya ke Website Saya. Pemindaian isi video/film otomatis belum didukung untuk semua situs.")
+            .setMessage("Masukkan alamat website. StreamHub akan mengambil metadata, memindai hingga 18 halaman HTML di domain tersebut, lalu menyimpan daftar halaman dan tautan media ke JSON lokal. Situs yang hanya memuat katalog melalui JavaScript atau login mungkin tidak terbaca.")
             .setView(WebActivity.box(this, in))
             .setPositiveButton(App.t(R.string.home_add), null)
             .setNegativeButton(android.R.string.cancel, null).create();
