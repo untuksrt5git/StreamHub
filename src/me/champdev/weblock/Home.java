@@ -2029,12 +2029,12 @@ public class Home extends Activity {
         why.setVisibility(secOpen ? View.VISIBLE : View.GONE);
         secBox.addView(why);
         secBox.addView(settingRow(R.drawable.ic_heart, "Buy Me a Coffee", "buymeacoffee.com/rohit267", null, v -> openLink("https://buymeacoffee.com/rohit267")));
-        secBox.addView(settingRow(R.drawable.ic_heart, "PayPal", "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
+        secBox.addView(settingRow(R.drawable.ic_code, "GitHub", "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
 
         section(App.t(R.string.home_about), R.drawable.ic_info, true);
         secBox.addView(settingRow(R.drawable.ic_language, App.t(R.string.home_about_site), "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
-        secBox.addView(settingRow(R.drawable.ic_code, App.t(R.string.home_about_source), "github.com/StreamHub/android", null, v -> openLink("https://github.com/StreamHub/android")));
-        secBox.addView(settingRow(R.drawable.ic_info, App.t(R.string.home_about_bug), "github.com/StreamHub/android/issues", null, v -> openLink("https://github.com/StreamHub/android/issues")));
+        secBox.addView(settingRow(R.drawable.ic_code, App.t(R.string.home_about_source), "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
+        secBox.addView(settingRow(R.drawable.ic_info, App.t(R.string.home_about_bug), "github.com/untuksrt5git/StreamHub/issues", null, v -> openLink("https://github.com/untuksrt5git/StreamHub/issues")));
         TextView about = text(App.t(App.tv ? R.string.home_about_tv : R.string.home_about_phone, ver), sp(12, 11), MUTED, false);
         about.setPadding(u(52, 50), dp(6), dp(14), dp(12));
         about.setVisibility(secOpen ? View.VISIBLE : View.GONE);
