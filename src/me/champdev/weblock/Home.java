@@ -416,6 +416,7 @@ public class Home extends Activity {
             case 3: sportsTab(); break;
             case 4: catalogTab("series", Cats.ANIME, Catalog.POPULAR_ANIME); break;
             case 5: iptvTab(); break;
+            case 6: indexedCatalogTab(); break;
             default: settingsTab();
         }
         View first = firstCard;
@@ -794,10 +795,10 @@ public class Home extends Activity {
     // ---- tabs ----
 
     static final int[] TABS = {R.string.home_tab_home, R.string.home_tab_movies, R.string.home_tab_tv, R.string.home_tab_sports, R.string.home_tab_anime,
-        R.string.home_tab_iptv, R.string.home_tab_settings};
-    static final int SETTINGS = 6;
+        R.string.home_tab_iptv, R.string.home_tab_iptv, R.string.home_tab_settings};
+    static final int SETTINGS = 7;
     final List<TextView> tabViews = new ArrayList<>();
-    static final int[] TAB_ICONS = {R.drawable.ic_home, R.drawable.ic_movie, R.drawable.ic_tv, R.drawable.ic_trophy, R.drawable.ic_sparkle, R.drawable.ic_live, R.drawable.ic_settings};
+    static final int[] TAB_ICONS = {R.drawable.ic_home, R.drawable.ic_movie, R.drawable.ic_tv, R.drawable.ic_trophy, R.drawable.ic_sparkle, R.drawable.ic_live, R.drawable.ic_movie, R.drawable.ic_settings};
     static int tab;
     static final Map<Integer, String> genres = new HashMap<>();
     static String focusGenre;
@@ -819,7 +820,7 @@ public class Home extends Activity {
         else bar.setBackgroundColor(NAV);
         for (int i = 0; i < SETTINGS; i++) {   // Settings is the gear (top bar on a phone, foot of the rail on a TV)
             final int n = i;
-            TextView t = text(App.t(TABS[i]), 11, MUTED, true);
+            TextView t = text(i == 6 ? "Katalog" : App.t(TABS[i]), 11, MUTED, true);
             t.setContentDescription(t.getText());
             tabViews.add(t);
             t.setGravity(Gravity.CENTER);
@@ -2725,6 +2726,118 @@ public class Home extends Activity {
     }
 
     /** Opens the local JSON index as a browsable list of pages found on the user's site. */
+    /** Catalog built from the user's own locally indexed websites, not from the inherited public catalog. */
+    void indexedCatalogTab() {
+        col.addView(heading("KATALOG WEBSITE"));
+        TextView intro = text("Konten yang ditemukan otomatis dari website yang Anda tambahkan. Pilih halaman untuk membukanya, atau pilih embed untuk membuka pemutarnya di website.", sp(14, 12), MUTED, false);
+        intro.setPadding(0, 0, 0, dp(12));
+        col.addView(intro);
+        List<Sites.Site> sites = Sites.favorites();
+        if (sites.isEmpty()) {
+            col.addView(note("Belum ada website. Tambahkan website dari tab Beranda untuk mulai membuat katalog."));
+            return;
+        }
+        int totalPages = 0, totalEmbeds = 0, totalMedia = 0, indexedSites = 0;
+        List<org.json.JSONObject> indexes = new ArrayList<>();
+        for (Sites.Site site : sites) {
+            String fileName = site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile;
+            try {
+                org.json.JSONObject root = new org.json.JSONObject(Sources.read(new File(getFilesDir(), fileName)));
+                indexes.add(root);
+                int p = root.optJSONArray("pages") == null ? 0 : root.optJSONArray("pages").length();
+                int e = root.optJSONArray("embeds") == null ? 0 : root.optJSONArray("embeds").length();
+                int m = root.optJSONArray("media") == null ? 0 : root.optJSONArray("media").length();
+                if (p > 0 || e > 0 || m > 0) indexedSites++;
+                totalPages += p; totalEmbeds += e; totalMedia += m;
+            } catch (Exception ex) { indexes.add(new org.json.JSONObject()); }
+        }
+        TextView summary = text(indexedSites + " website terindeks  ·  " + totalPages + " halaman  ·  " + totalEmbeds + " embed  ·  " + totalMedia + " file media",
+            sp(13, 11), ACCENT, true);
+        summary.setPadding(0, 0, 0, dp(16));
+        col.addView(summary);
+        for (int n = 0; n < sites.size(); n++) {
+            Sites.Site site = sites.get(n);
+            org.json.JSONObject root = indexes.get(n);
+            org.json.JSONArray pages = root.optJSONArray("pages");
+            org.json.JSONArray embeds = root.optJSONArray("embeds");
+            org.json.JSONArray media = root.optJSONArray("media");
+            col.addView(heading(site.name));
+            int pageCount = pages == null ? 0 : pages.length();
+            int embedCount = embeds == null ? 0 : embeds.length();
+            TextView count = text(pageCount + " halaman  ·  " + embedCount + " embed video  ·  " + (media == null ? 0 : media.length()) + " file media",
+                sp(12, 11), MUTED, false);
+            count.setPadding(0, 0, 0, dp(8));
+            col.addView(count);
+            if (pageCount == 0 && embedCount == 0) {
+                col.addView(note("Belum ada hasil indeks. Buka menu website di Beranda lalu pilih Pindai ulang."));
+            } else {
+                for (int i = 0; pages != null && i < pageCount; i++) {
+                    org.json.JSONObject pageItem = pages.optJSONObject(i);
+                    if (pageItem == null) continue;
+                    String title = pageItem.optString("title", "Halaman website");
+                    String url = pageItem.optString("url", site.currentUrl.isEmpty() ? site.url : site.currentUrl);
+                    String kind = pageItem.optString("kind", "page");
+                    String poster = pageItem.optString("poster", "");
+                    col.addView(indexedPageCard(site, title, kind, url, poster));
+                }
+                if (embedCount > 0) {
+                    TextView sub = text("PEMUTAR / EMBED", sp(12, 11), ACCENT, true);
+                    sub.setPadding(0, dp(12), 0, dp(6));
+                    col.addView(sub);
+                    for (int i = 0; i < embedCount; i++) {
+                        String url = embeds.optString(i);
+                        if (!url.startsWith("http")) continue;
+                        col.addView(indexedPageCard(site, "Buka pemutar video " + (i + 1), "embed", url, ""));
+                    }
+                }
+            }
+        }
+    }
+
+    View indexedPageCard(Sites.Site site, String title, String kind, String url, String poster) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(8), dp(7), dp(10), dp(7));
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+        cp.bottomMargin = dp(7);
+        card.setLayoutParams(cp);
+        card.setBackground(rounded(CARD, dp(12)));
+        if (!poster.isEmpty() && poster.startsWith("http")) {
+            FrameLayout thumb = new FrameLayout(this);
+            ImageView image = new ImageView(this);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            thumb.addView(image, new FrameLayout.LayoutParams(dp(66), dp(88)));
+            TextView placeholder = text("▶", 20, MUTED, true);
+            placeholder.setGravity(Gravity.CENTER);
+            placeholder.setBackground(rounded(CARD_HI, dp(8)));
+            thumb.addView(placeholder, new FrameLayout.LayoutParams(dp(66), dp(88)));
+            card.addView(thumb, new LinearLayout.LayoutParams(dp(66), dp(88)));
+            loadImage(image, poster, placeholder, 180);
+        } else {
+            TextView icon = text(kind.equals("embed") ? "▶" : "▣", 22, ACCENT, true);
+            icon.setGravity(Gravity.CENTER);
+            icon.setBackground(rounded(CARD_HI, dp(8)));
+            card.addView(icon, new LinearLayout.LayoutParams(dp(54), dp(66)));
+        }
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setPadding(dp(11), 0, 0, 0);
+        TextView name = text(title, sp(14, 12), TEXT, true);
+        name.setMaxLines(2);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        details.addView(name);
+        TextView type = text(kind.toUpperCase(java.util.Locale.ROOT) + "  ·  " + Uri.parse(url).getHost(), sp(10, 9), MUTED, false);
+        type.setPadding(0, dp(5), 0, 0);
+        type.setMaxLines(1);
+        type.setEllipsize(TextUtils.TruncateAt.END);
+        details.addView(type);
+        card.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+        focusable(card, dp(12));
+        card.setOnClickListener(v -> startActivity(WebActivity.open(this, site.name, site.url, url)));
+        return card;
+    }
+
     void showSiteIndex(Sites.Site site) {
         File file = new File(getFilesDir(), site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile);
         org.json.JSONObject root;
