@@ -243,7 +243,7 @@ final class WebsiteIndexer {
     }
 
     private static String decode(String s) {
-        return s == null ? "" : s.replace("&amp;", "&").replace("&quot;", "\\\"")
+        return s == null ? "" : s.replace("&amp;", "&").replace("&quot;", "\"")
             .replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">");
     }
 
