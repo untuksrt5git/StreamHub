@@ -2718,7 +2718,7 @@ public class Home extends Activity {
             List<Runnable> actions = new ArrayList<>();
             items.add(App.t(Sites.isFavorite(s.url) ? R.string.home_remove_favorite : R.string.home_add_favorite));
             actions.add(() -> { Sites.toggleFavorite(s); build(); });
-            File indexFile = new File(getFilesDir(), WebsiteIndexer.fileName(CustomSites.id(s.url)));
+            File indexFile = new File(getFilesDir(), s.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(s.url)) : s.indexFile);
             if (indexFile.exists()) {
                 items.add("Lihat hasil indeks website");
                 actions.add(() -> showSiteIndex(s));
@@ -2739,7 +2739,7 @@ public class Home extends Activity {
 
     /** Opens the local JSON index as a browsable list of pages found on the user's site. */
     void showSiteIndex(Sites.Site site) {
-        File file = new File(getFilesDir(), WebsiteIndexer.fileName(CustomSites.id(site.url)));
+        File file = new File(getFilesDir(), site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile);
         org.json.JSONObject root;
         try { root = new org.json.JSONObject(Sources.read(file)); }
         catch (Exception e) { root = new org.json.JSONObject(); }
@@ -2772,7 +2772,7 @@ public class Home extends Activity {
 
     /** What tapping a site card does; the title page overrides it to search for the title there. */
     void openSite(Sites.Site s) {
-        startActivity(WebActivity.open(this, s.name, s.url, s.url));
+        startActivity(WebActivity.open(this, s.name, s.url, s.currentUrl.isEmpty() ? s.url : s.currentUrl));
     }
 
     /** True for the site card that is the title page's current pick (it gets an outline). */
