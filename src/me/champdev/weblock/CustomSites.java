@@ -77,6 +77,57 @@ final class CustomSites {
         });
     }
 
+    /** Refresh up to three stale custom sites per app start. Redirects are followed so moved domains update in the local index. */
+    static void refresh(Context context) {
+        long now = System.currentTimeMillis();
+        if (now - App.prefs.getLong("customSitesRefreshAt", 0) < 12L * 3600 * 1000) return;
+        App.prefs.edit().putLong("customSitesRefreshAt", now).apply();
+        Context app = context.getApplicationContext();
+        App.io.execute(() -> {
+            synchronized (CustomSites.class) {
+                File file = new File(app.getFilesDir(), "custom-sites.json");
+                JSONObject root = read(file);
+                JSONArray sites = root.optJSONArray("sites");
+                if (sites == null) return;
+                JSONArray updated = new JSONArray();
+                int refreshed = 0;
+                for (int i = 0; i < sites.length(); i++) {
+                    JSONObject old = sites.optJSONObject(i);
+                    if (old == null) continue;
+                    JSONObject item = old;
+                    long last = old.optLong("lastIndexedAt", 0);
+                    if (refreshed < 3 && old.optBoolean("autoUpdate", true) &&
+                            now - last > 24L * 3600 * 1000) {
+                        String original = old.optString("url");
+                        JSONObject fresh = metadata(original);
+                        if (fresh.optBoolean("metadataFetched")) {
+                            JSONObject scan = WebsiteIndexer.scan(app, fresh.optString("id"), fresh.optString("currentUrl", original));
+                            try {
+                                int pageCount = scan.optJSONArray("pages") == null ? 0 : scan.optJSONArray("pages").length();
+                                int mediaCount = scan.optJSONArray("media") == null ? 0 : scan.optJSONArray("media").length();
+                                String beforeHost = Uri.parse(original).getHost();
+                                String afterHost = Uri.parse(fresh.optString("currentUrl", original)).getHost();
+                                fresh.put("indexFile", WebsiteIndexer.fileName(fresh.optString("id")))
+                                    .put("indexedPages", pageCount).put("indexedMedia", mediaCount)
+                                    .put("indexStatus", scan.optString("status", "unavailable"))
+                                    .put("lastIndexedAt", now).put("lastCheckedAt", now)
+                                    .put("domainChanged", beforeHost != null && afterHost != null && !beforeHost.equalsIgnoreCase(afterHost));
+                                item = fresh;
+                                renameFavorite(original, fresh.optString("name"));
+                                refreshed++;
+                            } catch (Exception ignored) { }
+                        }
+                    }
+                    updated.put(item);
+                }
+                try {
+                    root.put("version", 1).put("updatedAt", now).put("sites", updated);
+                    atomicWrite(file, root.toString(2));
+                } catch (Exception ignored) { }
+            }
+        });
+    }
+
     private static JSONObject metadata(String address) {
         String html = "", finalUrl = address;
         HttpURLConnection c = null;
@@ -119,6 +170,12 @@ final class CustomSites {
              .put("updatedAt", System.currentTimeMillis());
         } catch (Exception ignored) { }
         return o;
+    }
+
+    private static String absolute(String base, String value) {
+        if (value == null || value.trim().isEmpty()) return "";
+        try { return new java.net.URL(new java.net.URL(base), value.trim()).toString(); }
+        catch (Exception e) { return value.trim(); }
     }
 
     private static String meta(String html, String key) {
