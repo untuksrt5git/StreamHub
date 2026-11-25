@@ -43,6 +43,8 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"/>
         <activity android:name="me.champdev.weblock.TitleActivity" android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"/>
+        <activity android:name="me.champdev.weblock.SiteScanActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"/>
         <activity android:name="me.champdev.weblock.WebActivity" android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize"/>
