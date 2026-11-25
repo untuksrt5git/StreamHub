@@ -124,7 +124,7 @@ final class CustomSites {
     }
     private static String clean(String s) {
         return s == null ? "" : s.replaceAll("(?is)<[^>]+>", " ").replace("&amp;", "&")
-            .replace("&quot;", "\\"").replace("&#39;", "'").replaceAll("\\s+", " ").trim();
+            .replace("&quot;", "\"").replace("&#39;", "'").replaceAll("\\s+", " ").trim();
     }
     private static String id(String s) {
         try {
