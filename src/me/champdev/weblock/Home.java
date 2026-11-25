@@ -2783,7 +2783,7 @@ public class Home extends Activity {
                     col.addView(row);
                     inRow = 0;
                 }
-                row.addView(indexedVideoCard(title, poster, playUrl, pageUrl), new LinearLayout.LayoutParams(0, -2, 1));
+                row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")), new LinearLayout.LayoutParams(0, -2, 1));
                 inRow++;
                 total++;
             }
@@ -2794,7 +2794,7 @@ public class Home extends Activity {
         if (total == 0) col.addView(note("Belum ditemukan pasangan halaman video dan embed. Buka website lalu pilih Pindai ulang agar indeks video terbaru dibuat. Jika website memuat daftar lewat JavaScript, indeks HTML statis mungkin tidak dapat mengambil poster atau judulnya."));
     }
 
-    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl) {
+    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl, String brand, String logo, String description) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(5), dp(5), dp(5), dp(12));
@@ -2818,10 +2818,31 @@ public class Home extends Activity {
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setPadding(dp(5), dp(8), dp(5), 0);
         card.addView(name);
+        LinearLayout sourceRow = new LinearLayout(this);
+        sourceRow.setGravity(Gravity.CENTER_VERTICAL);
+        sourceRow.setPadding(dp(5), dp(5), dp(5), 0);
+        if (logo.matches("(?i)^https?://.+")) {
+            ImageView brandLogo = new ImageView(this);
+            brandLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            sourceRow.addView(brandLogo, new LinearLayout.LayoutParams(dp(22), dp(22)));
+            loadImage(brandLogo, logo, null, 96);
+        }
         String host = Uri.parse(playUrl).getHost();
-        TextView source = text(host == null ? "Sumber video" : host.replaceFirst("^www\\.", ""), sp(10, 9), MUTED, false);
-        source.setPadding(dp(5), dp(4), dp(5), 0);
-        card.addView(source);
+        String label = !brand.isEmpty() ? brand : host == null ? "Sumber video" : host.replaceFirst("^www\\\\.", "");
+        TextView source = text(label, sp(10, 9), MUTED, true);
+        source.setMaxLines(1);
+        source.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams sourceLp = new LinearLayout.LayoutParams(0, -2, 1);
+        sourceLp.leftMargin = dp(5);
+        sourceRow.addView(source, sourceLp);
+        card.addView(sourceRow);
+        if (!description.isEmpty()) {
+            TextView summary = text(description, sp(11, 10), MUTED, false);
+            summary.setMaxLines(2);
+            summary.setEllipsize(TextUtils.TruncateAt.END);
+            summary.setPadding(dp(5), dp(4), dp(5), 0);
+            card.addView(summary);
+        }
         focusable(card, dp(12));
         card.setOnClickListener(v -> {
             String sourceName = Uri.parse(playUrl).getHost();
