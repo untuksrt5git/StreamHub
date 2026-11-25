@@ -177,13 +177,32 @@ func register(timeout time.Duration) (*account, error) {
 	}, nil
 }
 
+// tunnelDNS applies custom IPv4/IPv6 DNS addresses inside WARP, falling back to Cloudflare defaults.
+func tunnelDNS(raw string) []netip.Addr {
+	seen := map[netip.Addr]bool{}
+	var out []netip.Addr
+	for _, item := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\n' || r == '\t'
+	}) {
+		ip, err := netip.ParseAddr(strings.TrimSpace(item))
+		if err == nil && !seen[ip] {
+			seen[ip] = true
+			out = append(out, ip)
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("1.0.0.1"))
+	}
+	return out
+}
+
 // up starts WireGuard and tries endpoints (last working one first) until traffic flows.
 func up(a *account) (*netstack.Net, string, error) {
 	addrs := []netip.Addr{netip.MustParseAddr(a.V4)}
 	if v6, err := netip.ParseAddr(a.V6); err == nil {
 		addrs = append(addrs, v6)
 	}
-	dns := []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("1.0.0.1")}
+	dns := tunnelDNS(os.Getenv("WARP_TUN_DNS"))
 	tun, tnet, err := netstack.CreateNetTUN(addrs, dns, 1280)
 	if err != nil {
 		return nil, "", err
