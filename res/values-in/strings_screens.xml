@@ -18,11 +18,11 @@
     <string name="web_download_failed">Unduhan gagal: %1$s</string>
     <string name="web_saved">%1$s disimpan ke Unduhan</string>
     <string name="web_reload">Muat ulang</string>
-    <string name="web_play_native">Putar di AnantPlayer</string>
-    <string name="web_native_auto">AnantPlayer: otomatis (beralih saat video mulai)</string>
-    <string name="web_native_off">AnantPlayer: nonaktif</string>
-    <string name="web_native_off_toast">AnantPlayer nonaktif</string>
-    <string name="web_native_on_toast">AnantPlayer aktif</string>
+    <string name="web_play_native">Putar di StreamHub Player</string>
+    <string name="web_native_auto">StreamHub Player: otomatis (beralih saat video mulai)</string>
+    <string name="web_native_off">StreamHub Player: nonaktif</string>
+    <string name="web_native_off_toast">StreamHub Player nonaktif</string>
+    <string name="web_native_on_toast">StreamHub Player aktif</string>
     <string name="web_use_warp">Gunakan WARP untuk %1$s</string>
     <string name="web_no_warp">Jangan gunakan WARP untuk %1$s</string>
     <string name="web_warp_on_site">WARP aktif untuk situs ini</string>
