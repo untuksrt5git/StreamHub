@@ -2709,9 +2709,9 @@ public class Home extends Activity {
             if (indexFile.exists()) {
                 items.add("Lihat hasil indeks website");
                 actions.add(() -> showSiteIndex(s));
-                items.add("Pindai ulang website");
-                actions.add(() -> CustomSites.add(this, s.url, message -> { toast(message); build(); }));
             }
+            items.add(indexFile.exists() ? "Pindai ulang website" : "Pindai website");
+            actions.add(() -> CustomSites.add(this, s.url, message -> { toast(message); build(); }));
             for (String m : s.mirrors) {
                 items.add(App.t(R.string.home_open_mirror, Uri.parse(m).getHost()));
                 actions.add(() -> startActivity(WebActivity.open(this, s.name, m, m)));
@@ -2748,8 +2748,9 @@ public class Home extends Activity {
             urls.add(p.optString("url"));
         }
         int media = root.optJSONArray("media") == null ? 0 : root.optJSONArray("media").length();
+        int embeds = root.optJSONArray("embeds") == null ? 0 : root.optJSONArray("embeds").length();
         new AlertDialog.Builder(this).setTitle("Indeks: " + site.name)
-            .setMessage(labels.size() + " halaman ditemukan · " + media + " tautan media")
+            .setMessage(labels.size() + " halaman · " + media + " file media · " + embeds + " embed video")
             .setItems(labels.toArray(new String[0]), (dialog, which) -> {
                 if (which >= 0 && which < urls.size() && !urls.get(which).isEmpty())
                     startActivity(WebActivity.open(this, site.name, site.url, urls.get(which)));
