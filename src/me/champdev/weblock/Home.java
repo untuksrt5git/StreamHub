@@ -2711,8 +2711,12 @@ public class Home extends Activity {
                 items.add("Lihat hasil indeks website");
                 actions.add(() -> showSiteIndex(s));
             }
-            items.add(indexFile.exists() ? "Pindai ulang website" : "Pindai website");
+            items.add(indexFile.exists() ? "Pindai ulang website (HTML)" : "Pindai website (HTML)");
             actions.add(() -> CustomSites.add(this, s.url, message -> { toast(message); build(); }));
+            items.add("Pindai katalog JavaScript");
+            actions.add(() -> startActivity(new Intent(this, SiteScanActivity.class)
+                .putExtra("url", s.currentUrl == null || s.currentUrl.isEmpty() ? s.url : s.currentUrl)
+                .putExtra("name", s.name)));
             for (String m : s.mirrors) {
                 items.add(App.t(R.string.home_open_mirror, Uri.parse(m).getHost()));
                 actions.add(() -> startActivity(WebActivity.open(this, s.name, m, m)));
