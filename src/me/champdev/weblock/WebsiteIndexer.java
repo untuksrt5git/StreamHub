@@ -126,7 +126,7 @@ final class WebsiteIndexer {
                 }
             }
 
-            result.put("version", 1).put("siteId", siteId).put("rootUrl", startUrl)
+            result.put("version", 2).put("siteId", siteId).put("rootUrl", startUrl)
                 .put("finalUrl", visited.isEmpty() ? startUrl : pages.length() > 0 ? pages.optJSONObject(0).optString("url", startUrl) : startUrl)
                 .put("generatedAt", System.currentTimeMillis()).put("checkedPages", checked)
                 .put("failedPages", failed).put("pages", pages).put("media", media).put("embeds", embeds).put("videos", videos)
@@ -135,7 +135,7 @@ final class WebsiteIndexer {
             File out = new File(context.getFilesDir(), fileName(siteId));
             atomicWrite(out, result.toString(2));
         } catch (Exception e) {
-            try { result.put("version", 1).put("siteId", siteId).put("rootUrl", startUrl)
+            try { result.put("version", 2).put("siteId", siteId).put("rootUrl", startUrl)
                 .put("generatedAt", System.currentTimeMillis()).put("status", "error")
                 .put("error", e.getClass().getSimpleName()).put("pages", pages).put("media", media); }
             catch (Exception ignored) { }
