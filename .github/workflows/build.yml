@@ -32,6 +32,10 @@ jobs:
           yes | "$SDKM" --licenses > /dev/null || true
           "$SDKM" "platforms;android-34" "build-tools;35.0.0" > /dev/null
 
+      - name: Test the WARP helper
+        working-directory: warp
+        run: go test ./...
+
       - name: Build the WARP helper
         run: warp/build.sh
 
