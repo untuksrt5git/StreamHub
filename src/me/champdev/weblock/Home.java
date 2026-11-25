@@ -42,7 +42,8 @@ import java.util.Map;
 /** Start screen: Continue watching, then the sources' streaming sites by category, then the user's own sites. */
 public class Home extends Activity {
     // One accent, kept for play and progress; everything else is ink, two card tones and two text tones
-    static final int BG = 0xFF0E0C13, CARD = 0xFF1A1721, CARD_HI = 0xFF282431, NAV = 0xFF131019, ACCENT = 0xFFFF3B5C, TEXT = 0xFFF4F2F7, MUTED = 0xFF9690A3;
+    static final int BG = 0xFF08111F, CARD = 0xFF111E31, CARD_HI = 0xFF1B2C46, NAV = 0xFF0B1728, ACCENT = 0xFF28B8FF, TEXT = 0xFFF2F7FF, MUTED = 0xFF9AAAC0;
+    static final int PURPLE = 0xFF8B5CF6;
     // Decoded pictures: a sixth of the app's memory (it was a fixed 24 MB, about 17 posters, so scrolling back decoded them all again)
     static final LruCache<String, Bitmap> images = new LruCache<String, Bitmap>((int) Math.min(Runtime.getRuntime().maxMemory() / 6, 64L << 20)) {
         @Override protected int sizeOf(String k, Bitmap b) { return b.getAllocationByteCount(); }
@@ -437,17 +438,17 @@ public class Home extends Activity {
             for (History.Entry e : history) row.addView(historyCard(e));
         }
 
+        // Website pribadi selalu ditampilkan di Beranda, termasuk saat daftar masih kosong.
+        // Tombol Tambah Website tidak lagi tersembunyi di Pengaturan.
         List<Sites.Site> favs = Sites.favorites();
-        if (!favs.isEmpty()) {   // only once something is marked (Add a site is also in Settings, Sites)
-            LinearLayout favHead = new LinearLayout(this);
-            favHead.setGravity(Gravity.BOTTOM);
-            favHead.addView(heading(App.t(R.string.home_favorites_heart)), new LinearLayout.LayoutParams(0, -2, 1));
-            favHead.addView(iconButton(R.drawable.ic_delete, App.t(R.string.home_clear_all_favorites), v -> confirmClearFavorites(favs.size())));
-            col.addView(favHead);
-            LinearLayout favRow = row();
-            for (Sites.Site s : favs) favRow.addView(siteCard(s, false));
-            favRow.addView(addCard());
-        }
+        LinearLayout favHead = new LinearLayout(this);
+        favHead.setGravity(Gravity.BOTTOM);
+        favHead.addView(heading("WEBSITE SAYA"), new LinearLayout.LayoutParams(0, -2, 1));
+        if (!favs.isEmpty()) favHead.addView(iconButton(R.drawable.ic_delete, App.t(R.string.home_clear_all_favorites), v -> confirmClearFavorites(favs.size())));
+        col.addView(favHead);
+        LinearLayout favRow = row();
+        for (Sites.Site s : favs) favRow.addView(siteCard(s, false));
+        favRow.addView(addCard());
 
         List<Catalog.Title> mine = Catalog.mine();
         if (!mine.isEmpty()) {
@@ -2023,13 +2024,12 @@ public class Home extends Activity {
         // Which build is this? (the TV and phone APKs share a package, so say it on screen)
         String ver = "";
         try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
-        section(App.t(R.string.home_donate), R.drawable.ic_heart, true);
-        View why = note(App.t(R.string.home_donate_help));
+        section("PENGEMBANGAN STREAMHUB", R.drawable.ic_code, true);
+        View why = note("StreamHub dikembangkan secara independen. Kode sumber, pembaruan, dan pelaporan masalah tersedia di repositori resmi.");
         why.setPadding(u(52, 50), 0, dp(14), dp(8));
         why.setVisibility(secOpen ? View.VISIBLE : View.GONE);
         secBox.addView(why);
-        secBox.addView(settingRow(R.drawable.ic_heart, "Buy Me a Coffee", "buymeacoffee.com/rohit267", null, v -> openLink("https://buymeacoffee.com/rohit267")));
-        secBox.addView(settingRow(R.drawable.ic_code, "GitHub", "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
+        secBox.addView(settingRow(R.drawable.ic_code, "GitHub StreamHub", "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
 
         section(App.t(R.string.home_about), R.drawable.ic_info, true);
         secBox.addView(settingRow(R.drawable.ic_language, App.t(R.string.home_about_site), "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
@@ -2780,8 +2780,8 @@ public class Home extends Activity {
 
     void addSiteDialog() {
         EditText in = WebActivity.field(this, "https://example.com", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        AlertDialog dlg = new AlertDialog.Builder(this).setTitle(App.t(R.string.home_add_site))
-            .setMessage("Masukkan alamat website satu kali. StreamHub mengambil metadata dasar dan membuat indeks JSON lokal jika situs dapat diakses.")
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Tambah website ke StreamHub")
+            .setMessage("Masukkan alamat website. StreamHub menyimpan alamat, mengambil nama dan ikon jika tersedia, lalu menambahkannya ke Website Saya. Pemindaian isi video/film otomatis belum didukung untuk semua situs.")
             .setView(WebActivity.box(this, in))
             .setPositiveButton(App.t(R.string.home_add), null)
             .setNegativeButton(android.R.string.cancel, null).create();
