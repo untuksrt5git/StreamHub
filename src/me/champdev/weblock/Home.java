@@ -833,7 +833,7 @@ public class Home extends Activity {
     TextView brand(float size) {
         TextView name = text("", size, TEXT, true);
         android.text.SpannableString s = new android.text.SpannableString("StreamHub");
-        s.setSpan(new android.text.style.ForegroundColorSpan(ACCENT), 5, 9, 0);
+        s.setSpan(new android.text.style.ForegroundColorSpan(ACCENT), 6, 9, 0);
         name.setText(s);
         name.setSingleLine();
         return name;
