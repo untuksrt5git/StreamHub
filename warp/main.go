@@ -190,8 +190,14 @@ func tunnelDNS(raw string) []netip.Addr {
 			out = append(out, ip)
 		}
 	}
-	if len(out) == 0 {
-		out = append(out, netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("1.0.0.1"))
+	// Keep public resolvers as last-resort entries so an unreachable custom DNS
+	// server does not leave the tunnel without a resolver at all.
+	for _, fallback := range []string{"1.1.1.1", "1.0.0.1"} {
+		ip := netip.MustParseAddr(fallback)
+		if !seen[ip] {
+			seen[ip] = true
+			out = append(out, ip)
+		}
 	}
 	return out
 }
