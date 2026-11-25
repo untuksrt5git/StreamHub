@@ -67,8 +67,11 @@ final class Warp {
             try {
                 String bin = App.app.getApplicationInfo().nativeLibraryDir + "/libwarp.so";
                 ProcessBuilder pb = new ProcessBuilder(bin, App.app.getFilesDir().getPath()).redirectErrorStream(true);
-                String dns = App.prefs.getString("warpDns", "");   // DNS servers typed in Settings (your ISP's), asked first for Cloudflare's address
-                if (!dns.isEmpty()) pb.environment().put("WARP_DNS", dns);
+                String dns = App.prefs.getString("warpDns", "").trim();
+                if (!dns.isEmpty()) {
+                    pb.environment().put("WARP_DNS", dns);       // DNS for WARP bootstrap registration
+                    pb.environment().put("WARP_TUN_DNS", dns);    // DNS advertised inside the active WARP tunnel
+                }
                 p = pb.start();
                 synchronized (Warp.class) {
                     if (gen != mine) { p.destroy(); return; }
