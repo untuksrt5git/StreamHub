@@ -425,7 +425,35 @@ public class Home extends Activity {
         }
     }
 
+    /** StreamHub identity panel: a distinct blue-violet welcome area and a direct website action. */
+    View homeIdentity() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(18), dp(20), dp(18));
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            new int[]{0xFF12345B, 0xFF38266E});
+        bg.setCornerRadius(dp(20));
+        panel.setBackground(bg);
+        TextView brand = text("STREAMHUB", sp(25, 22), Color.WHITE, true);
+        TextView tagline = text("Website streaming pilihan Anda, dalam satu aplikasi.",
+            sp(13, 12), 0xFFDCE8FF, false);
+        tagline.setPadding(0, dp(4), 0, dp(12));
+        TextView add = text("+  TAMBAH WEBSITE", sp(13, 12), Color.WHITE, true);
+        add.setGravity(Gravity.CENTER);
+        add.setPadding(dp(16), dp(10), dp(16), dp(10));
+        add.setBackground(rounded(ACCENT, dp(24)));
+        add.setOnClickListener(v -> addSiteDialog());
+        focusable(add, dp(24));
+        panel.addView(brand);
+        panel.addView(tagline);
+        LinearLayout.LayoutParams actionLp = new LinearLayout.LayoutParams(-2, -2);
+        actionLp.topMargin = dp(2);
+        panel.addView(add, actionLp);
+        return panel;
+    }
+
     void buildHome() {
+        col.addView(homeIdentity(), new LinearLayout.LayoutParams(-1, -2));
         heroBox = new FrameLayout(this);   // filled by the first poster row that has titles
         heroBox.setVisibility(View.GONE);
         col.addView(heroBox);
