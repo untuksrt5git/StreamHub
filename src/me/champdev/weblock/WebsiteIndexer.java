@@ -51,7 +51,7 @@ final class WebsiteIndexer {
 
     static JSONObject scan(Context context, String siteId, String startUrl) {
         JSONObject result = new JSONObject();
-        JSONArray pages = new JSONArray(), media = new JSONArray(), embeds = new JSONArray();
+        JSONArray pages = new JSONArray(), media = new JSONArray(), embeds = new JSONArray(), videos = new JSONArray();
         try {
             URL start = new URL(startUrl);
             String rootHost = host(start.getHost());
@@ -76,7 +76,20 @@ final class WebsiteIndexer {
                     .put("kind", classify(page.url, page.title)).put("indexedAt", System.currentTimeMillis());
                 pages.put(entry);
 
-                for (String embed : page.embeds) if (embeds.length() < MAX_MEDIA && !embeds.toString().contains(embed)) embeds.put(embed);
+                for (String embed : page.embeds) {
+                    if (embeds.length() < MAX_MEDIA && !embeds.toString().contains(embed)) embeds.put(embed);
+                    boolean duplicateVideo = false;
+                    for (int vi = 0; vi < videos.length(); vi++) {
+                        JSONObject oldVideo = videos.optJSONObject(vi);
+                        if (oldVideo != null && embed.equals(oldVideo.optString("embedUrl"))) { duplicateVideo = true; break; }
+                    }
+                    if (!duplicateVideo && videos.length() < MAX_MEDIA) {
+                        JSONObject video = new JSONObject().put("title", page.title.isEmpty() ? label(page.url) : page.title)
+                            .put("poster", page.poster).put("pageUrl", page.url).put("embedUrl", embed)
+                            .put("sourceHost", host(new URL(embed).getHost()));
+                        videos.put(video);
+                    }
+                }
                 for (String m : page.media) {
                     if (media.length() >= MAX_MEDIA) break;
                     boolean exists = false;
@@ -102,7 +115,7 @@ final class WebsiteIndexer {
             result.put("version", 1).put("siteId", siteId).put("rootUrl", startUrl)
                 .put("finalUrl", visited.isEmpty() ? startUrl : pages.length() > 0 ? pages.optJSONObject(0).optString("url", startUrl) : startUrl)
                 .put("generatedAt", System.currentTimeMillis()).put("checkedPages", checked)
-                .put("failedPages", failed).put("pages", pages).put("media", media).put("embeds", embeds)
+                .put("failedPages", failed).put("pages", pages).put("media", media).put("embeds", embeds).put("videos", videos)
                 .put("status", pages.length() > 0 ? "indexed" : "unavailable")
                 .put("limitations", "Indeks HTML statis; situs yang merender katalog hanya melalui JavaScript, login, atau proteksi bot mungkin tidak terbaca.");
             File out = new File(context.getFilesDir(), fileName(siteId));
