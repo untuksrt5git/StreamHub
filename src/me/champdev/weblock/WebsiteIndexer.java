@@ -37,6 +37,7 @@ final class WebsiteIndexer {
     private static final Pattern META = Pattern.compile("(?is)<meta\\b([^>]+)>");
     private static final Pattern ATTR = Pattern.compile("(?is)([a-z_:][-a-z0-9_:.]*)\\s*=\\s*(['\\\"])(.*?)\\2");
     private static final Pattern MEDIA_TAG = Pattern.compile("(?is)<(?:video|source)\\b([^>]*)>");
+    private static final Pattern EMBED_TAG = Pattern.compile("(?is)<iframe\\b([^>]*)>");
     private static final Pattern SRC = Pattern.compile("(?is)\\bsrc\\s*=\\s*(['\\\"])(.*?)\\1");
     private static final Pattern CANONICAL = Pattern.compile("(?is)<link\\b([^>]*rel\\s*=\\s*(['\\\"])canonical\\2[^>]*)>");
     private static final Pattern SKIP = Pattern.compile("(?i)(login|logout|register|signup|account|profile|privacy|terms|contact|about|javascript:|mailto:|tel:|\\.pdf$|\\.(jpg|jpeg|png|gif|webp|css|js|woff2?|ttf|svg|ico)$)");
@@ -50,7 +51,7 @@ final class WebsiteIndexer {
 
     static JSONObject scan(Context context, String siteId, String startUrl) {
         JSONObject result = new JSONObject();
-        JSONArray pages = new JSONArray(), media = new JSONArray();
+        JSONArray pages = new JSONArray(), media = new JSONArray(), embeds = new JSONArray();
         try {
             URL start = new URL(startUrl);
             String rootHost = host(start.getHost());
@@ -75,6 +76,7 @@ final class WebsiteIndexer {
                     .put("kind", classify(page.url, page.title)).put("indexedAt", System.currentTimeMillis());
                 pages.put(entry);
 
+                for (String embed : page.embeds) if (embeds.length() < MAX_MEDIA && !embeds.toString().contains(embed)) embeds.put(embed);
                 for (String m : page.media) {
                     if (media.length() >= MAX_MEDIA) break;
                     boolean exists = false;
@@ -100,7 +102,7 @@ final class WebsiteIndexer {
             result.put("version", 1).put("siteId", siteId).put("rootUrl", startUrl)
                 .put("finalUrl", visited.isEmpty() ? startUrl : pages.length() > 0 ? pages.optJSONObject(0).optString("url", startUrl) : startUrl)
                 .put("generatedAt", System.currentTimeMillis()).put("checkedPages", checked)
-                .put("failedPages", failed).put("pages", pages).put("media", media)
+                .put("failedPages", failed).put("pages", pages).put("media", media).put("embeds", embeds)
                 .put("status", pages.length() > 0 ? "indexed" : "unavailable")
                 .put("limitations", "Indeks HTML statis; situs yang merender katalog hanya melalui JavaScript, login, atau proteksi bot mungkin tidak terbaca.");
             File out = new File(context.getFilesDir(), fileName(siteId));
@@ -142,6 +144,7 @@ final class WebsiteIndexer {
             if (p.poster.isEmpty()) p.poster = meta(html, "twitter:image");
             p.links.addAll(links(html));
             p.media.addAll(media(html, p.url));
+            p.embeds.addAll(embeds(html, p.url));
             return p;
         } catch (Exception ignored) {
             return null;
@@ -157,7 +160,7 @@ final class WebsiteIndexer {
             Matcher h = HREF.matcher(a.group(1));
             if (!h.find()) continue;
             String link = decode(h.group(2).trim());
-            if (link.isEmpty() || link.startsWith("#") || link.startsWith("//")) continue;
+            if (link.isEmpty() || link.startsWith("#")) continue;
             if (link.matches("(?i)^(javascript|mailto|tel|data):.*")) continue;
             out.add(link);
         }
@@ -175,6 +178,22 @@ final class WebsiteIndexer {
                 URL u = new URL(new URL(base), value);
                 String path = u.getPath().toLowerCase(Locale.ROOT);
                 if (path.matches(".*\\.(m3u8|mpd|mp4|webm|m4v|flv)$")) out.add(u.toString());
+            } catch (Exception ignored) { }
+        }
+        return out;
+    }
+
+    private static Set<String> embeds(String html, String base) {
+        Set<String> out = new LinkedHashSet<>();
+        Matcher tag = EMBED_TAG.matcher(html);
+        while (tag.find() && out.size() < MAX_MEDIA) {
+            Matcher src = SRC.matcher(tag.group(1));
+            if (!src.find()) continue;
+            String value = decode(src.group(2).trim());
+            try {
+                URL u = new URL(new URL(base), value);
+                if ("http".equalsIgnoreCase(u.getProtocol()) || "https".equalsIgnoreCase(u.getProtocol()))
+                    out.add(u.toString());
             } catch (Exception ignored) { }
         }
         return out;
@@ -255,6 +274,6 @@ final class WebsiteIndexer {
     }
     private static final class Page {
         String url = "", title = "", description = "", poster = "";
-        final Set<String> links = new LinkedHashSet<>(), media = new LinkedHashSet<>();
+        final Set<String> links = new LinkedHashSet<>(), media = new LinkedHashSet<>(), embeds = new LinkedHashSet<>();
     }
 }
