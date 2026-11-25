@@ -95,7 +95,7 @@ final class CustomSites {
         if (name.isEmpty()) name = host;
         String description = meta(html, "description");
         if (description.isEmpty()) description = meta(html, "og:description");
-        String iconPath = match(html, "(?is)<link[^>]+rel=[\\"'][^>]*icon[^>]*href=[\\"']([^\\"']+)");
+        String iconPath = match(html, "(?is)<link[^>]+rel=[\"'][^>]*icon[^>]*href=[\"']([^\"']+)");
         if (iconPath.isEmpty()) iconPath = "/favicon.ico";
         String icon;
         try { icon = new URL(new URL(u.toString()), iconPath).toString(); }
@@ -103,7 +103,7 @@ final class CustomSites {
         JSONObject o = new JSONObject();
         try {
             o.put("id", id(address)).put("name", clean(name)).put("url", address).put("currentUrl", finalUrl)
-             .put("canonicalUrl", match(html, "(?is)<link[^>]+rel=[\\"']canonical[\\"'][^>]+href=[\\"']([^\\"']+)"))
+             .put("canonicalUrl", match(html, "(?is)<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)"))
              .put("icon", icon).put("description", clean(description)).put("category", "website")
              .put("tags", new JSONArray().put("custom")).put("aliases", new JSONArray())
              .put("autoUpdate", true).put("metadataFetched", !html.isEmpty())
@@ -113,9 +113,9 @@ final class CustomSites {
     }
 
     private static String meta(String html, String key) {
-        String v = match(html, "(?is)<meta[^>]+(?:property|name)=[\\"']" + Pattern.quote(key) +
-                "[\\"'][^>]+content=[\\"']([^\\"']*)[\\"']");
-        if (v.isEmpty()) v = match(html, "(?is)<meta[^>]+content=[\\"']([^\\"']*)[\\"'][^>]+(?:property|name)=[\\"']" + Pattern.quote(key) + "[\\"']");
+        String v = match(html, "(?is)<meta[^>]+(?:property|name)=[\"']" + Pattern.quote(key) +
+                "[\"'][^>]+content=[\"']([^\"']*)[\"']");
+        if (v.isEmpty()) v = match(html, "(?is)<meta[^>]+content=[\"']([^\"']*)[\"'][^>]+(?:property|name)=[\"']" + Pattern.quote(key) + "[\"']");
         return clean(v);
     }
     private static String match(String s, String re) {
