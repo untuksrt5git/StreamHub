@@ -2754,14 +2754,19 @@ public class Home extends Activity {
 
     void addSiteDialog() {
         EditText in = WebActivity.field(this, "https://example.com", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        new AlertDialog.Builder(this).setTitle(App.t(R.string.home_add_site)).setView(WebActivity.box(this, in))
-            .setPositiveButton(App.t(R.string.home_add), (d, w) -> {
-                if (in.getText().toString().trim().isEmpty()) return;
-                Sites.addCustom(in.getText().toString());
-                build();
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle(App.t(R.string.home_add_site))
+            .setMessage("Masukkan alamat website satu kali. StreamHub mengambil metadata dasar dan membuat indeks JSON lokal jika situs dapat diakses.")
+            .setView(WebActivity.box(this, in))
+            .setPositiveButton(App.t(R.string.home_add), null)
+            .setNegativeButton(android.R.string.cancel, null).create();
+        dlg.setOnShowListener(v -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
+            String raw = in.getText().toString().trim();
+            if (raw.isEmpty()) { in.setError("Masukkan alamat website"); return; }
+            dlg.dismiss();
+            toast("Menambahkan website dan membuat indeks…");
+            CustomSites.add(this, raw, message -> { toast(message); build(); });
+        }));
+        dlg.show();
     }
 
     LinearLayout.LayoutParams cardParams(int w, int h) {
