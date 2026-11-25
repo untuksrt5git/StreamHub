@@ -60,8 +60,17 @@ final class CustomSites {
                     if (!found) sites.put(item);
                     root.put("version", 1).put("updatedAt", System.currentTimeMillis()).put("sites", sites);
                     atomicWrite(f, root.toString(2));
-                    JSONObject idx = new JSONObject().put("version", 1).put("sources",
-                        new JSONArray().put(new JSONObject().put("type", "custom-sites").put("url", "custom-sites.json")));
+                    JSONArray indexSources = new JSONArray();
+                    indexSources.put(new JSONObject().put("type", "custom-sites").put("url", "custom-sites.json"));
+                    for (int i = 0; i < sites.length(); i++) {
+                        JSONObject entry = sites.optJSONObject(i);
+                        if (entry == null || entry.optString("indexFile").isEmpty()) continue;
+                        indexSources.put(new JSONObject().put("type", "site-pages")
+                            .put("siteId", entry.optString("id")).put("name", entry.optString("name"))
+                            .put("websiteUrl", entry.optString("url")).put("url", entry.optString("indexFile")));
+                    }
+                    JSONObject idx = new JSONObject().put("version", 1).put("updatedAt", System.currentTimeMillis())
+                        .put("sources", indexSources);
                     atomicWrite(new File(app.getFilesDir(), "user-index.json"), idx.toString(2));
                     renameFavorite(address, item.optString("name"));
                 }
