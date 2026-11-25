@@ -1644,11 +1644,37 @@ public class Home extends Activity {
             .show();
     }
 
-    /** Keeps only valid-looking IPv4/IPv6 addresses, then starts WARP again with them (when it is switched on). */
+    /** Accept literal IPv4/IPv6 resolver addresses only; never accept hostnames or malformed numeric strings. */
+    static boolean validDnsIp(String value) {
+        if (value == null || value.isEmpty()) return false;
+        if (value.indexOf(':') >= 0) {
+            try { return java.net.InetAddress.getByName(value) instanceof java.net.Inet6Address; }
+            catch (Exception e) { return false; }
+        }
+        String[] octets = value.split("\\.", -1);
+        if (octets.length != 4) return false;
+        for (String part : octets) {
+            if (part.isEmpty() || part.length() > 3) return false;
+            try { int n = Integer.parseInt(part); if (n < 0 || n > 255) return false; }
+            catch (NumberFormatException e) { return false; }
+        }
+        return true;
+    }
+
+    /** Save validated resolver IPs and restart WARP so its tunnel resolver list is rebuilt. */
     void saveWarpDns(String typed) {
-        StringBuilder ok = new StringBuilder();
-        for (String ip : typed.split("[,;\\s]+")) if (ip.matches("[0-9a-fA-F:.]{3,45}") && (ip.contains(".") || ip.contains(":"))) ok.append(ok.length() > 0 ? "," : "").append(ip);
-        App.prefs.edit().putString("warpDns", ok.toString()).apply();
+        java.util.LinkedHashSet<String> addresses = new java.util.LinkedHashSet<>();
+        for (String ip : typed.trim().split("[,;\\s]+")) {
+            if (ip.isEmpty()) continue;
+            if (!validDnsIp(ip)) {
+                toast("Alamat DNS tidak valid: " + ip + ". Gunakan IPv4 atau IPv6.");
+                return;
+            }
+            addresses.add(ip);
+        }
+        StringBuilder value = new StringBuilder();
+        for (String ip : addresses) value.append(value.length() > 0 ? "," : "").append(ip);
+        App.prefs.edit().putString("warpDns", value.toString()).apply();
         if (App.prefs.getBoolean("warp", true)) { Warp.stop(); Warp.start(); }
         build();
     }
