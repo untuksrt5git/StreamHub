@@ -325,7 +325,7 @@ public class TitleActivity extends Home {
             // the sites that open the title (or episode) directly come first, the list's order kept within each half
             String kind = t.anime ? "anime" : t.series() ? "tv" : "movie";
             row = new ArrayList<>(row);
-            row.sort(java.util.Comparator.comparing(s -> !Sites.hasLink(s.url, kind)));
+            row.sort(java.util.Comparator.comparing(s -> !Sites.hasLink(s.address(), kind)));
         }
         List<Sites.Site> out = new ArrayList<>();
         out.addAll(Sites.favorites());
@@ -359,8 +359,10 @@ public class TitleActivity extends Home {
 
     // The title's own page when the site is known (by TMDB id), else the site with a search for its name
     android.content.Intent titleIntent(Sites.Site s) {
-        String link = Sites.deeplink(s.url, t);
-        android.content.Intent in = WebActivity.open(this, s.name, s.url, link != null ? link : s.url);
+        // Use the redirect/canonical address for Title Links; s.url remains the stable favorite key.
+        String address = s.address();
+        String link = Sites.deeplink(address, t);
+        android.content.Intent in = WebActivity.open(this, s.name, address, link != null ? link : address);
         return link != null ? in.putExtra("play", !t.series()) : in.putExtra("q", t.name).putExtra("year", t.year);
     }
 
