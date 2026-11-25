@@ -72,7 +72,7 @@ final class CustomSites {
         String html = "", finalUrl = address;
         HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(address).openConnection();
+            c = Warp.open(address);
             c.setInstanceFollowRedirects(true);
             c.setConnectTimeout(8000); c.setReadTimeout(8000);
             c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) AppleWebKit/537.36 Chrome/120 Safari/537.36");
