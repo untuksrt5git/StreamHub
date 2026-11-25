@@ -179,10 +179,20 @@ final class CustomSites {
         String icon;
         try { icon = new URL(new URL(u.toString()), iconPath).toString(); }
         catch (Exception e) { icon = u.getScheme() + "://" + host + "/favicon.ico"; }
+        String canonical = absolute(finalUrl, match(html, "(?is)<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)"));
+        String currentUrl = finalUrl;
+        try {
+            java.net.URL canonicalAddress = new java.net.URL(canonical);
+            if (("http".equalsIgnoreCase(canonicalAddress.getProtocol()) || "https".equalsIgnoreCase(canonicalAddress.getProtocol()))
+                    && canonicalAddress.getHost() != null && !canonicalAddress.getHost().isEmpty()
+                    && u.getHost() != null && !canonicalAddress.getHost().equalsIgnoreCase(u.getHost()))
+                currentUrl = canonical;
+        } catch (Exception ignored) { }
         JSONObject o = new JSONObject();
         try {
-            o.put("id", id(address)).put("name", clean(name)).put("url", address).put("currentUrl", finalUrl)
-             .put("canonicalUrl", absolute(finalUrl, match(html, "(?is)<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)")))
+            o.put("id", id(address)).put("name", clean(name)).put("url", address).put("currentUrl", currentUrl)
+             .put("canonicalUrl", canonical)
+             .put("domainChanged", !Uri.parse(address).getHost().equalsIgnoreCase(Uri.parse(currentUrl).getHost()))
              .put("icon", icon).put("description", clean(description)).put("category", "website")
              .put("tags", new JSONArray().put("custom")).put("aliases", new JSONArray())
              .put("autoUpdate", true).put("metadataFetched", !html.isEmpty())
