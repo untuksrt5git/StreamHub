@@ -25,6 +25,11 @@ final class Sites {
         List<String> tagList = new ArrayList<>();
         final List<String> mirrors = new ArrayList<>();
         boolean pick, index;
+
+        /** Last working address after redirects/canonical changes; url remains the stable saved identity. */
+        String address() {
+            return currentUrl != null && currentUrl.matches("(?i)^https?://.+") ? currentUrl : url;
+        }
     }
 
     private static org.json.JSONObject deeplinks;
@@ -78,8 +83,18 @@ final class Sites {
         return site != null && site.optString("anime").contains("{audio}");
     }
 
+    /** Exact host matching; aliases are explicit in the optional "@aliases" object of deeplinks.json. */
     static String hostOf(String url) {
-        return String.valueOf(Uri.parse(url).getHost()).replaceFirst("^www\\.", "");
+        String host = Uri.parse(url).getHost();
+        if (host == null) return "";
+        host = host.toLowerCase(java.util.Locale.ROOT).replaceFirst("^www\\\\.", "").replaceFirst("\\\\.$", "");
+        org.json.JSONObject aliases = deeplinks().optJSONObject("@aliases");
+        for (int i = 0; aliases != null && i < 4; i++) {
+            String next = aliases.optString(host, "");
+            if (next.isEmpty()) break;
+            host = next.toLowerCase(java.util.Locale.ROOT).replaceFirst("^www\\\\.", "").replaceFirst("\\\\.$", "");
+        }
+        return host;
     }
 
     /**
@@ -103,7 +118,7 @@ final class Sites {
         }
         m.appendTail(out);
         String path = out.toString();
-        return path.startsWith("http") ? path : u.getScheme() + "://" + u.getHost() + path;
+        return path.matches("(?i)^https?://.*") ? path : u.getScheme() + "://" + u.getAuthority() + path;
     }
 
     /** Row -> sites and language -> sites, in display order. Parsed once per file version: every tab asks for these. */
