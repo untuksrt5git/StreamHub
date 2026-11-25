@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds AnantPlay-TV-v<version>.apk and AnantPlay-Android-v<version>.apk with plain SDK tools (no Gradle).
+# Builds StreamHub-TV-v<version>.apk and StreamHub-Android-v<version>.apk with plain SDK tools (no Gradle).
 # Needs: an Android SDK (platform 34 + build-tools), a JDK 17+, and the WARP helper built once with warp/build.sh (needs Go).
 # Env: ANDROID_HOME, VERSION_NAME, VERSION_CODE, TEST_EXPORT=1 (emulator test build), DEBUG_TV=1 (TV build with web inspection, for a real TV).
 # TV: Android TV launcher + banner, remote navigation with the cursor on by default.  Android: phone/tablet launcher, touch.
@@ -47,16 +47,16 @@ sed -e '/LEANBACK_LAUNCHER/d' -e 's| android:banner="@drawable/banner"||' Androi
 # The version is in the file name, so you can tell builds apart in Telegram, Downloads and on the TV
 if [ -n "$TEST_EXPORT" ]; then # emulator testing: WebActivity + IptvActivity exported so `adb shell am start` can open a test page, and Home answers the HOME key (the emulator has no other launcher)
   sed -e 's|\(\.WebActivity" android:exported="\)false|\1true|' -e 's|<application |<application android:debuggable="true" |' -e 's|\(\.IptvActivity" android:exported="\)false|\1true|' -e 's|\(\.TitleActivity" android:exported="\)false|\1true|' -e 's|\(\.PlayerActivity" android:exported="\)false|\1true|' -e 's|\(\.DownloadsActivity" android:exported="\)false|\1true|' -e 's|\(\.AuthActivity" android:exported="\)false|\1true|' -e 's|\(\.Cast\$Keep" android:exported="\)false|\1true|' -e 's|<category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|&<category android:name="android.intent.category.HOME"/><category android:name="android.intent.category.DEFAULT"/>|' AndroidManifest.xml > build/AndroidManifest-test.xml
-  pack tv build/AndroidManifest-test.xml AnantPlay-TV-test.apk
+  pack tv build/AndroidManifest-test.xml StreamHub-TV-test.apk
   sed -e '/LEANBACK_LAUNCHER/d' -e 's| android:banner="@drawable/banner"||' build/AndroidManifest-test.xml > build/AndroidManifest-android-test.xml
-  pack android build/AndroidManifest-android-test.xml AnantPlay-Android-test.apk
+  pack android build/AndroidManifest-android-test.xml StreamHub-Android-test.apk
   exit 0
 fi
 if [ -n "$DEBUG_TV" ]; then # a real device: the normal TV build with web inspection on (chrome://inspect), nothing else changed
   sed -e 's|<application |<application android:debuggable="true" |' AndroidManifest.xml > build/AndroidManifest-debug.xml
-  pack tv build/AndroidManifest-debug.xml AnantPlay-TV-debug.apk
+  pack tv build/AndroidManifest-debug.xml StreamHub-TV-debug.apk
   exit 0
 fi
-rm -f AnantPlay*.apk
-pack tv AndroidManifest.xml AnantPlay-TV-v$VERSION_NAME.apk
-pack android build/AndroidManifest-android.xml AnantPlay-Android-v$VERSION_NAME.apk
+rm -f StreamHub*.apk
+pack tv AndroidManifest.xml StreamHub-TV-v$VERSION_NAME.apk
+pack android build/AndroidManifest-android.xml StreamHub-Android-v$VERSION_NAME.apk
