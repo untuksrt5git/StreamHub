@@ -37,7 +37,14 @@ final class CustomSites {
         Context app = context.getApplicationContext();
         App.io.execute(() -> {
             JSONObject item = metadata(address);
+            JSONObject scan = WebsiteIndexer.scan(app, item.optString("id"), item.optString("currentUrl", address));
             try {
+                item.put("indexFile", WebsiteIndexer.fileName(item.optString("id")))
+                    .put("indexedPages", scan.optJSONArray("pages") == null ? 0 : scan.optJSONArray("pages").length())
+                    .put("indexedMedia", scan.optJSONArray("media") == null ? 0 : scan.optJSONArray("media").length())
+                    .put("indexStatus", scan.optString("status", "unavailable"))
+                    .put("lastIndexedAt", System.currentTimeMillis())
+                    .put("currentUrl", scan.optString("finalUrl", item.optString("currentUrl", address)));
                 synchronized (CustomSites.class) {
                     File f = new File(app.getFilesDir(), "custom-sites.json");
                     JSONObject root = read(f);
@@ -60,9 +67,11 @@ final class CustomSites {
                 }
             } catch (Exception ignored) { }
             if (callback != null) {
-                String msg = "Website ditambahkan: " + item.optString("name")
-                    + (item.optBoolean("metadataFetched") ? ". Metadata dan indeks JSON tersimpan." :
-                    ". Tersimpan sebagai website; metadata tidak dapat diambil saat ini.");
+                int pageCount = scan.optJSONArray("pages") == null ? 0 : scan.optJSONArray("pages").length();
+                int mediaCount = scan.optJSONArray("media") == null ? 0 : scan.optJSONArray("media").length();
+                String msg = "Website ditambahkan: " + item.optString("name") + ". "
+                    + pageCount + " halaman dan " + mediaCount + " tautan media ditemukan. "
+                    + (pageCount == 0 ? "Situs mungkin memakai JavaScript, login, atau proteksi bot." : "Indeks JSON lokal tersimpan.");
                 App.main.post(() -> callback.done(msg));
             }
         });
@@ -126,7 +135,7 @@ final class CustomSites {
         return s == null ? "" : s.replaceAll("(?is)<[^>]+>", " ").replace("&amp;", "&")
             .replace("&quot;", "\"").replace("&#39;", "'").replaceAll("\\s+", " ").trim();
     }
-    private static String id(String s) {
+    static String id(String s) {
         try {
             byte[] b = MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"));
             StringBuilder out = new StringBuilder("site-");
