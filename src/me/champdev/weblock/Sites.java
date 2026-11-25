@@ -21,7 +21,7 @@ final class Sites {
     static final int ROW_MAX = 14;
 
     static final class Site {
-        String name, url, tags = "", group = "";   // group = the section of its list it came from
+        String name, url, tags = "", group = "", currentUrl = "", indexFile = "";   // group = the section of its list it came from
         List<String> tagList = new ArrayList<>();
         final List<String> mirrors = new ArrayList<>();
         boolean pick, index;
@@ -216,6 +216,8 @@ final class Sites {
                 Site s = new Site();
                 s.name = a.getJSONObject(i).getString("name");
                 s.url = a.getJSONObject(i).getString("url");
+                s.currentUrl = a.getJSONObject(i).optString("currentUrl");
+                s.indexFile = a.getJSONObject(i).optString("indexFile");
                 s.tags = a.getJSONObject(i).optString("tags");
                 out.add(s);
             }
@@ -241,7 +243,7 @@ final class Sites {
                 if (a.getJSONObject(i).getString("url").equals(site.url)) removed = true;
                 else kept.put(a.get(i));
             }
-            if (!removed) kept.put(new JSONObject().put("name", site.name).put("url", site.url).put("tags", site.tags));
+            if (!removed) kept.put(new JSONObject().put("name", site.name).put("url", site.url).put("currentUrl", site.currentUrl).put("indexFile", site.indexFile).put("tags", site.tags));
             App.prefs.edit().putString("favs", kept.toString()).apply();
         } catch (JSONException ignored) { }
     }
