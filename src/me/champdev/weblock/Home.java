@@ -455,9 +455,6 @@ public class Home extends Activity {
 
     void buildHome() {
         col.addView(homeIdentity(), new LinearLayout.LayoutParams(-1, -2));
-        heroBox = new FrameLayout(this);   // filled by the first poster row that has titles
-        heroBox.setVisibility(View.GONE);
-        col.addView(heroBox);
         if (!Update.available().isEmpty()) col.addView(updateLine(Update.available()));
 
         List<History.Entry> history = History.list();
@@ -467,35 +464,24 @@ public class Home extends Activity {
             for (History.Entry e : history) row.addView(historyCard(e));
         }
 
-        // Website pribadi selalu ditampilkan di Beranda, termasuk saat daftar masih kosong.
-        // Tombol Tambah Website tidak lagi tersembunyi di Pengaturan.
-        List<Sites.Site> favs = Sites.favorites();
-        LinearLayout favHead = new LinearLayout(this);
-        favHead.setGravity(Gravity.BOTTOM);
-        favHead.addView(heading("WEBSITE SAYA"), new LinearLayout.LayoutParams(0, -2, 1));
-        if (!favs.isEmpty()) favHead.addView(iconButton(R.drawable.ic_delete, App.t(R.string.home_clear_all_favorites), v -> confirmClearFavorites(favs.size())));
-        col.addView(favHead);
-        LinearLayout favRow = row();
-        for (Sites.Site s : favs) favRow.addView(siteCard(s, false));
-        favRow.addView(addCard());
+        // StreamHub starts with the websites the viewer chose, not a pre-filled catalog from another app.
+        List<Sites.Site> sites = Sites.favorites();
+        col.addView(heading("WEBSITE SAYA"));
+        if (sites.isEmpty()) {
+            TextView empty = text("Belum ada website. Tekan Tambah Website untuk memasukkan alamat situs streaming pilihan Anda.",
+                sp(14, 12), MUTED, false);
+            empty.setPadding(0, dp(2), 0, dp(12));
+            col.addView(empty);
+        }
+        LinearLayout siteRow = row();
+        for (Sites.Site site : sites) siteRow.addView(siteCard(site, false));
+        siteRow.addView(addCard());
 
         List<Catalog.Title> mine = Catalog.mine();
         if (!mine.isEmpty()) {
             col.addView(heading(App.t(R.string.home_my_list)));
             posterRow(row(), App.t(R.string.home_my_list), mine);
         }
-        String movies = App.t(R.string.home_tab_movies), shows = App.t(R.string.home_tab_tv), anime = App.t(R.string.home_tab_anime);
-        // The viewer's own country first (its languages' most popular titles), then the world's
-        String region = App.region();
-        loadHero();
-        if (Catalog.languages(region).length > 0) {
-            String country = new java.util.Locale("", region).getDisplayCountry();
-            titleRow(movies, country, "movie", "local=" + region, 1);
-            titleRow(shows, country, "series", "local=" + region, 2);
-        }
-        // The rows below the first screen are added a frame later, so Home shows up at once
-        final int id = built;
-        col.post(() -> { if (id == built && tab == 0) lowerHome(movies, shows, anime); });
     }
 
     void lowerHome(String movies, String shows, String anime) {
@@ -2699,7 +2685,8 @@ public class Home extends Activity {
         name.setPadding(u(10, 8), 0, 0, 0);
         top.addView(name);
         card.addView(top);
-        TextView tags = text(s.tags.isEmpty() ? host : s.tags, sp(12, 11), MUTED, false);
+        String siteHint = !s.indexFile.isEmpty() ? "Indeks lokal siap · " + host : (s.tags.isEmpty() ? host : s.tags);
+        TextView tags = text(siteHint, sp(12, 11), MUTED, false);
         tags.setSingleLine();
         tags.setEllipsize(TextUtils.TruncateAt.END);
         tags.setPadding(0, u(6, 2), 0, 0);
