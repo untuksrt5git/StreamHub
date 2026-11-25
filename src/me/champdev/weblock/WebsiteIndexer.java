@@ -212,11 +212,16 @@ final class WebsiteIndexer {
             String html = out.toString("UTF-8");
             Page p = new Page(); p.url = c.getURL().toString();
             p.title = clean(first(TITLE, html)); p.ogTitle = meta(html, "og:title");
+            if (p.ogTitle.isEmpty()) p.ogTitle = jsonLd(html, "name");
             p.heading = clean(first(H1, html)); p.siteName = meta(html, "og:site_name");
-            p.logo = logo(html, p.url); p.description = meta(html, "og:description");
+            p.logo = logo(html, p.url);
+            if (p.logo.isEmpty()) p.logo = absolute(p.url, jsonLd(html, "logo"));
+            p.description = meta(html, "og:description");
             if (p.description.isEmpty()) p.description = meta(html, "description");
             p.poster = absolute(p.url, meta(html, "og:image"));
             if (p.poster.isEmpty()) p.poster = absolute(p.url, meta(html, "twitter:image"));
+            if (p.poster.isEmpty()) p.poster = absolute(p.url, jsonLd(html, "image"));
+            if (p.poster.isEmpty()) p.poster = videoPoster(html, p.url);
             if (!goodPoster(p.poster)) p.poster = "";
             return p;
         } catch (Exception ignored) { return null; }
