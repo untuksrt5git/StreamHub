@@ -2740,7 +2740,9 @@ public class Home extends Activity {
     /** Opens the local JSON index as a browsable list of pages found on the user's site. */
     void showSiteIndex(Sites.Site site) {
         File file = new File(getFilesDir(), WebsiteIndexer.fileName(CustomSites.id(site.url)));
-        org.json.JSONObject root = new org.json.JSONObject(Sources.read(file));
+        org.json.JSONObject root;
+        try { root = new org.json.JSONObject(Sources.read(file)); }
+        catch (Exception e) { root = new org.json.JSONObject(); }
         org.json.JSONArray pages = root.optJSONArray("pages");
         if (pages == null || pages.length() == 0) {
             new AlertDialog.Builder(this).setTitle("Indeks website")
