@@ -328,7 +328,10 @@ public class TitleActivity extends Home {
             row.sort(java.util.Comparator.comparing(s -> !Sites.hasLink(s.address(), kind)));
         }
         List<Sites.Site> out = new ArrayList<>();
-        out.addAll(Sites.favorites());
+        String titleKind = t.anime ? "anime" : t.series() ? "tv" : "movie";
+        // A manually favorited homepage is not automatically a destination for every movie.
+        for (Sites.Site s : Sites.favorites())
+            if (Sites.hasLink(s.address(), titleKind)) out.add(s);
         if (row != null) for (Sites.Site s : row) if (!Sites.has(out, s.url) && out.size() < 30) out.add(s);
         return out;
     }
