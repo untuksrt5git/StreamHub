@@ -2728,113 +2728,89 @@ public class Home extends Activity {
     /** Opens the local JSON index as a browsable list of pages found on the user's site. */
     /** Catalog built from the user's own locally indexed websites, not from the inherited public catalog. */
     void indexedCatalogTab() {
-        col.addView(heading("KATALOG WEBSITE"));
-        TextView intro = text("Konten yang ditemukan otomatis dari website yang Anda tambahkan. Pilih halaman untuk membukanya, atau pilih embed untuk membuka pemutarnya di website.", sp(14, 12), MUTED, false);
+        col.addView(heading("KATALOG VIDEO"));
+        TextView intro = text("Poster dan judul diambil otomatis dari halaman website. Ketuk kartu untuk membuka sumber pemutar; alamat sumber tetap mengikuti domain embed yang ditemukan.", sp(14, 12), MUTED, false);
         intro.setPadding(0, 0, 0, dp(12));
         col.addView(intro);
         List<Sites.Site> sites = Sites.favorites();
         if (sites.isEmpty()) {
-            col.addView(note("Belum ada website. Tambahkan website dari tab Beranda untuk mulai membuat katalog."));
+            col.addView(note("Belum ada website. Tambahkan website dari tab Beranda."));
             return;
         }
-        int totalPages = 0, totalEmbeds = 0, totalMedia = 0, indexedSites = 0;
-        List<org.json.JSONObject> indexes = new ArrayList<>();
+        int total = 0;
         for (Sites.Site site : sites) {
             String fileName = site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile;
             try {
                 org.json.JSONObject root = new org.json.JSONObject(Sources.read(new File(getFilesDir(), fileName)));
-                indexes.add(root);
-                int p = root.optJSONArray("pages") == null ? 0 : root.optJSONArray("pages").length();
-                int e = root.optJSONArray("embeds") == null ? 0 : root.optJSONArray("embeds").length();
-                int m = root.optJSONArray("media") == null ? 0 : root.optJSONArray("media").length();
-                if (p > 0 || e > 0 || m > 0) indexedSites++;
-                totalPages += p; totalEmbeds += e; totalMedia += m;
-            } catch (Exception ex) { indexes.add(new org.json.JSONObject()); }
-        }
-        TextView summary = text(indexedSites + " website terindeks  ·  " + totalPages + " halaman  ·  " + totalEmbeds + " embed  ·  " + totalMedia + " file media",
-            sp(13, 11), ACCENT, true);
-        summary.setPadding(0, 0, 0, dp(16));
-        col.addView(summary);
-        for (int n = 0; n < sites.size(); n++) {
-            Sites.Site site = sites.get(n);
-            org.json.JSONObject root = indexes.get(n);
-            org.json.JSONArray pages = root.optJSONArray("pages");
-            org.json.JSONArray embeds = root.optJSONArray("embeds");
-            org.json.JSONArray media = root.optJSONArray("media");
-            col.addView(heading(site.name));
-            int pageCount = pages == null ? 0 : pages.length();
-            int embedCount = embeds == null ? 0 : embeds.length();
-            TextView count = text(pageCount + " halaman  ·  " + embedCount + " embed video  ·  " + (media == null ? 0 : media.length()) + " file media",
-                sp(12, 11), MUTED, false);
-            count.setPadding(0, 0, 0, dp(8));
-            col.addView(count);
-            if (pageCount == 0 && embedCount == 0) {
-                col.addView(note("Belum ada hasil indeks. Buka menu website di Beranda lalu pilih Pindai ulang."));
-            } else {
-                for (int i = 0; pages != null && i < pageCount; i++) {
-                    org.json.JSONObject pageItem = pages.optJSONObject(i);
-                    if (pageItem == null) continue;
-                    String title = pageItem.optString("title", "Halaman website");
-                    String url = pageItem.optString("url", site.currentUrl.isEmpty() ? site.url : site.currentUrl);
-                    String kind = pageItem.optString("kind", "page");
-                    String poster = pageItem.optString("poster", "");
-                    col.addView(indexedPageCard(site, title, kind, url, poster));
-                }
-                if (embedCount > 0) {
-                    TextView sub = text("PEMUTAR / EMBED", sp(12, 11), ACCENT, true);
-                    sub.setPadding(0, dp(12), 0, dp(6));
-                    col.addView(sub);
-                    for (int i = 0; i < embedCount; i++) {
-                        String url = embeds.optString(i);
-                        if (!url.startsWith("http")) continue;
-                        col.addView(indexedPageCard(site, "Buka pemutar video " + (i + 1), "embed", url, ""));
+                org.json.JSONArray videos = root.optJSONArray("videos");
+                if (videos == null || videos.length() == 0) continue;
+                col.addView(heading(site.name, String.valueOf(videos.length())));
+                LinearLayout row = null;
+                int inRow = 0;
+                int columns = App.tv ? 4 : 2;
+                for (int i = 0; i < videos.length(); i++) {
+                    org.json.JSONObject video = videos.optJSONObject(i);
+                    if (video == null) continue;
+                    String title = video.optString("title", "Video");
+                    String poster = video.optString("poster", "");
+                    String embedUrl = video.optString("embedUrl", "");
+                    String pageUrl = video.optString("pageUrl", site.currentUrl.isEmpty() ? site.url : site.currentUrl);
+                    String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
+                    if (playUrl.isEmpty()) continue;
+                    if (row == null || inRow >= columns) {
+                        row = new LinearLayout(this);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        row.setGravity(Gravity.TOP);
+                        col.addView(row);
+                        inRow = 0;
                     }
+                    row.addView(indexedVideoCard(title, poster, playUrl, pageUrl), new LinearLayout.LayoutParams(0, -2, 1));
+                    inRow++;
+                    total++;
                 }
-            }
+                if (row != null && inRow < columns) {
+                    while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+                }
+            } catch (Exception ignored) { }
         }
+        if (total == 0) col.addView(note("Belum ditemukan pasangan halaman video dan embed. Jalankan Pindai ulang website agar indeks video terbaru dibuat."));
     }
 
-    View indexedPageCard(Sites.Site site, String title, String kind, String url, String poster) {
+    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl) {
         LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(8), dp(7), dp(10), dp(7));
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(5), dp(5), dp(5), dp(12));
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.bottomMargin = dp(7);
+        cp.setMargins(0, 0, dp(7), dp(8));
         card.setLayoutParams(cp);
         card.setBackground(rounded(CARD, dp(12)));
-        if (!poster.isEmpty() && poster.startsWith("http")) {
-            FrameLayout thumb = new FrameLayout(this);
-            ImageView image = new ImageView(this);
-            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            thumb.addView(image, new FrameLayout.LayoutParams(dp(66), dp(88)));
-            TextView placeholder = text("▶", 20, MUTED, true);
-            placeholder.setGravity(Gravity.CENTER);
-            placeholder.setBackground(rounded(CARD_HI, dp(8)));
-            thumb.addView(placeholder, new FrameLayout.LayoutParams(dp(66), dp(88)));
-            card.addView(thumb, new LinearLayout.LayoutParams(dp(66), dp(88)));
-            loadImage(image, poster, placeholder, 180);
-        } else {
-            TextView icon = text(kind.equals("embed") ? "▶" : "▣", 22, ACCENT, true);
-            icon.setGravity(Gravity.CENTER);
-            icon.setBackground(rounded(CARD_HI, dp(8)));
-            card.addView(icon, new LinearLayout.LayoutParams(dp(54), dp(66)));
-        }
-        LinearLayout details = new LinearLayout(this);
-        details.setOrientation(LinearLayout.VERTICAL);
-        details.setPadding(dp(11), 0, 0, 0);
+        FrameLayout frame = new FrameLayout(this);
+        int imageHeight = App.tv ? 220 : 164;
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        frame.addView(image, new FrameLayout.LayoutParams(-1, dp(imageHeight)));
+        TextView placeholder = text("▶", 28, MUTED, true);
+        placeholder.setGravity(Gravity.CENTER);
+        placeholder.setBackground(rounded(CARD_HI, dp(9)));
+        frame.addView(placeholder, new FrameLayout.LayoutParams(-1, dp(imageHeight)));
+        card.addView(frame);
+        if (poster.startsWith("http")) loadImage(image, poster, placeholder, App.tv ? 480 : 240);
         TextView name = text(title, sp(14, 12), TEXT, true);
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
-        details.addView(name);
-        TextView type = text(kind.toUpperCase(java.util.Locale.ROOT) + "  ·  " + Uri.parse(url).getHost(), sp(10, 9), MUTED, false);
-        type.setPadding(0, dp(5), 0, 0);
-        type.setMaxLines(1);
-        type.setEllipsize(TextUtils.TruncateAt.END);
-        details.addView(type);
-        card.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+        name.setPadding(dp(5), dp(8), dp(5), 0);
+        card.addView(name);
+        String host = Uri.parse(playUrl).getHost();
+        TextView source = text(host == null ? "Sumber video" : host.replaceFirst("^www\\.", ""), sp(10, 9), MUTED, false);
+        source.setPadding(dp(5), dp(4), dp(5), 0);
+        card.addView(source);
         focusable(card, dp(12));
-        card.setOnClickListener(v -> startActivity(WebActivity.open(this, site.name, site.url, url)));
+        card.setOnClickListener(v -> {
+            String sourceName = Uri.parse(playUrl).getHost();
+            if (sourceName == null || sourceName.isEmpty()) sourceName = title;
+            // The player origin is the actual embed host, never the parent site that happened to list it.
+            startActivity(WebActivity.open(this, title, playUrl, playUrl));
+        });
         return card;
     }
 
