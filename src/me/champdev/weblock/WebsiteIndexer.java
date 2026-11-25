@@ -28,12 +28,15 @@ final class WebsiteIndexer {
     private static final int MAX_BYTES = 320 * 1024;
     private static final int MAX_LINKS = 180;
     private static final int MAX_MEDIA = 40;
+    private static final int MAX_ENRICHED_EMBEDS = 12;
     private static final int MAX_DEPTH = 2;
     private static final long TIMEOUT = 7000L;
 
     private static final Pattern ANCHOR = Pattern.compile("(?is)<a\\b([^>]*)>(.*?)</a\\s*>");
     private static final Pattern HREF = Pattern.compile("(?is)\\bhref\\s*=\\s*(['\\\"])(.*?)\\1");
     private static final Pattern TITLE = Pattern.compile("(?is)<title\\b[^>]*>(.*?)</title\\s*>");
+    private static final Pattern H1 = Pattern.compile("(?is)<h1\\b[^>]*>(.*?)</h1\\s*>");
+    private static final Pattern LINK_TAG = Pattern.compile("(?is)<link\\b([^>]*)>");
     private static final Pattern META = Pattern.compile("(?is)<meta\\b([^>]+)>");
     private static final Pattern ATTR = Pattern.compile("(?is)([a-z_:][-a-z0-9_:.]*)\\s*=\\s*(['\\\"])(.*?)\\2");
     private static final Pattern MEDIA_TAG = Pattern.compile("(?is)<(?:video|source)\\b([^>]*)>");
@@ -78,18 +81,29 @@ final class WebsiteIndexer {
 
                 for (String embed : page.embeds) {
                     if (embeds.length() < MAX_MEDIA && !embeds.toString().contains(embed)) embeds.put(embed);
+                    if (isLikelyAdEmbed(embed)) continue;
                     boolean duplicateVideo = false;
                     for (int vi = 0; vi < videos.length(); vi++) {
                         JSONObject oldVideo = videos.optJSONObject(vi);
                         if (oldVideo != null && embed.equals(oldVideo.optString("embedUrl"))) { duplicateVideo = true; break; }
                     }
                     if (!duplicateVideo && videos.length() < MAX_MEDIA) {
-                        JSONObject video = new JSONObject().put("title", page.title.isEmpty() ? label(page.url) : page.title)
-                            .put("poster", page.poster).put("pageUrl", page.url).put("embedUrl", embed)
-                            .put("sourceHost", host(new URL(embed).getHost()));
-                        videos.put(video);
+                        // Inspect the iframe document: the parent's social image is often a banner/ad.
+                        Page embedded = videos.length() < MAX_ENRICHED_EMBEDS ? fetchEmbedMetadata(embed) : null;
+                        String title = firstUseful(embedded == null ? "" : embedded.ogTitle,
+                            embedded == null ? "" : embedded.heading, embedded == null ? "" : embedded.title,
+                            page.ogTitle, page.heading, page.title, label(page.url));
+                        String poster = firstPoster(embedded == null ? "" : embedded.poster, page.poster);
+                        String description = firstUseful(embedded == null ? "" : embedded.description, page.description);
+                        String logo = firstUseful(embedded == null ? "" : embedded.logo, page.logo);
+                        String brand = firstUseful(embedded == null ? "" : embedded.siteName, host(new URL(embed).getHost()));
+                        videos.put(new JSONObject().put("title", title).put("poster", poster).put("logo", logo)
+                            .put("brand", brand).put("description", description).put("pageUrl", page.url)
+                            .put("embedUrl", embed).put("sourceHost", host(new URL(embed).getHost()))
+                            .put("metadataSource", embedded == null ? "parent-page-fallback" : "embed-page"));
                     }
                 }
+
                 for (String m : page.media) {
                     if (media.length() >= MAX_MEDIA) break;
                     boolean exists = false;
@@ -151,10 +165,15 @@ final class WebsiteIndexer {
             Page p = new Page();
             p.url = c.getURL().toString();
             p.title = clean(first(TITLE, html));
+            p.ogTitle = meta(html, "og:title");
+            p.heading = clean(first(H1, html));
+            p.siteName = meta(html, "og:site_name");
+            p.logo = logo(html, p.url);
             p.description = meta(html, "description");
             if (p.description.isEmpty()) p.description = meta(html, "og:description");
-            p.poster = meta(html, "og:image");
-            if (p.poster.isEmpty()) p.poster = meta(html, "twitter:image");
+            p.poster = absolute(p.url, meta(html, "og:image"));
+            if (p.poster.isEmpty()) p.poster = absolute(p.url, meta(html, "twitter:image"));
+            if (!goodPoster(p.poster)) p.poster = "";
             p.links.addAll(links(html));
             p.media.addAll(media(html, p.url));
             p.embeds.addAll(embeds(html, p.url));
@@ -164,6 +183,84 @@ final class WebsiteIndexer {
         } finally {
             if (c != null) c.disconnect();
         }
+    }
+
+    /** Bounded fetch of an iframe's own HTML; never crawls its links or nested frames. */
+    private static Page fetchEmbedMetadata(String address) {
+        HttpURLConnection c = null;
+        try {
+            c = Warp.open(address);
+            c.setInstanceFollowRedirects(true);
+            c.setConnectTimeout(3500);
+            c.setReadTimeout(3500);
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Safari/537.36");
+            c.setRequestProperty("Accept", "text/html,application/xhtml+xml");
+            int code = c.getResponseCode();
+            String type = c.getContentType();
+            if (code < 200 || code >= 400 || (type != null && !type.toLowerCase(Locale.ROOT).contains("html"))) return null;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try (InputStream in = c.getInputStream()) {
+                byte[] buf = new byte[8192]; int n, total = 0;
+                while ((n = in.read(buf)) > 0 && total < 192 * 1024) {
+                    int take = Math.min(n, 192 * 1024 - total); out.write(buf, 0, take); total += take;
+                }
+            }
+            String html = out.toString("UTF-8");
+            Page p = new Page(); p.url = c.getURL().toString();
+            p.title = clean(first(TITLE, html)); p.ogTitle = meta(html, "og:title");
+            p.heading = clean(first(H1, html)); p.siteName = meta(html, "og:site_name");
+            p.logo = logo(html, p.url); p.description = meta(html, "og:description");
+            if (p.description.isEmpty()) p.description = meta(html, "description");
+            p.poster = absolute(p.url, meta(html, "og:image"));
+            if (p.poster.isEmpty()) p.poster = absolute(p.url, meta(html, "twitter:image"));
+            if (!goodPoster(p.poster)) p.poster = "";
+            return p;
+        } catch (Exception ignored) { return null; }
+        finally { if (c != null) c.disconnect(); }
+    }
+
+    private static String logo(String html, String base) {
+        String value = meta(html, "og:logo");
+        if (value.isEmpty()) {
+            Matcher m = LINK_TAG.matcher(html);
+            while (m.find()) if (attr(m.group(1), "rel").toLowerCase(Locale.ROOT).contains("icon")) {
+                value = attr(m.group(1), "href"); if (!value.isEmpty()) break;
+            }
+        }
+        return absolute(base, value);
+    }
+
+    private static String absolute(String base, String value) {
+        if (value == null || value.trim().isEmpty()) return "";
+        try { return new URL(new URL(base), decode(value.trim())).toString(); }
+        catch (Exception e) { return ""; }
+    }
+
+    private static String firstUseful(String... values) {
+        for (String value : values) {
+            String v = clean(value);
+            if (!v.isEmpty() && !v.matches("(?i)^(home|watch|play|video|stream|embed|untitled|loading|advertisement|ads?)$")) return v;
+        }
+        return "";
+    }
+
+    private static String firstPoster(String... values) {
+        for (String value : values) if (goodPoster(value)) return value;
+        return "";
+    }
+
+    private static boolean goodPoster(String value) {
+        if (value == null || !value.matches("(?i)^https?://.+")) return false;
+        String s = value.toLowerCase(Locale.ROOT);
+        return !s.matches(".*(doubleclick|googlesyndication|adservice|popads|exoclick|ads?[-_/ .]|banner[-_/ .]|advert|tracking|pixel\\.).*");
+    }
+
+    private static boolean isLikelyAdEmbed(String value) {
+        try {
+            URL u = new URL(value); String h = host(u.getHost()), p = u.getPath().toLowerCase(Locale.ROOT);
+            return h.matches(".*(doubleclick|googlesyndication|adservice|popads|exoclick|adsterra|propellerads).*")
+                || p.matches(".*(adserver|/ads?[/_-]|banner|popup|tracking).*");
+        } catch (Exception e) { return true; }
     }
 
     private static Set<String> links(String html) {
@@ -286,7 +383,7 @@ final class WebsiteIndexer {
         Task(String u, int d) { url = u; depth = d; }
     }
     private static final class Page {
-        String url = "", title = "", description = "", poster = "";
+        String url = "", title = "", ogTitle = "", heading = "", siteName = "", logo = "", description = "", poster = "";
         final Set<String> links = new LinkedHashSet<>(), media = new LinkedHashSet<>(), embeds = new LinkedHashSet<>();
     }
 }
