@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="sources_title">Sumber</string>
-    <string name="sources_hint">AnantPlay tidak membawa situs atau saluran sendiri. Tambahkan indeks, lalu sumber yang kamu mau darinya.</string>
-    <string name="sources_index_name">Indeks AnantPlay</string>
-    <string name="sources_index_help">Sumber yang dijaga tetap terbaru oleh proyek AnantPlay</string>
+    <string name="sources_hint">StreamHub tidak membawa situs atau saluran sendiri. Tambahkan indeks, lalu sumber yang kamu mau darinya.</string>
+    <string name="sources_index_name">Indeks StreamHub</string>
+    <string name="sources_index_help">Sumber yang dijaga tetap terbaru oleh proyek StreamHub</string>
     <string name="sources_index_add">Tambahkan indeks ini</string>
     <string name="sources_index_added">Indeks ditambahkan</string>
     <string name="sources_added">Ditambahkan</string>
@@ -14,7 +14,7 @@
     <string name="sources_unreachable">Gagal memuat. Pilih untuk mencoba lagi</string>
     <string name="sources_unreachable_toast">Tidak bisa dijangkau, coba lagi nanti</string>
     <string name="sources_added_toast">%1$s ditambahkan</string>
-    <string name="sources_newer">Perlu AnantPlay versi lebih baru</string>
+    <string name="sources_newer">Perlu StreamHub versi lebih baru</string>
     <string name="sources_title_links">Tautan judul</string>
     <string name="sources_type_sites">Situs</string>
     <string name="sources_type_playlist">Saluran</string>
@@ -30,7 +30,7 @@
     <string name="sources_checking">Memeriksa sumber…</string>
     <string name="sources_updated">Sumber diperbarui</string>
     <string name="sources_current">Sumber sudah terbaru</string>
-    <string name="sources_notice_title">FMHYPlay sekarang AnantPlay</string>
+    <string name="sources_notice_title">FMHYPlay sekarang StreamHub</string>
     <string name="sources_notice_msg">Situs dan saluran sekarang berasal dari sumber yang kamu pilih di Setelan, Sumber. Sumbermu sudah ditambahkan.</string>
     <string name="sources_notice_open">Buka Sumber</string>
 </resources>
