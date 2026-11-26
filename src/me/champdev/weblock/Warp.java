@@ -236,22 +236,37 @@ final class Warp {
         IOException directError;
         try {
             HttpURLConnection c = connect(url, Proxy.NO_PROXY, connectMs, readMs);
-            applyPageHeaders(c, referer);
+            applyPageHeaders(c, url, referer);
             return c.getInputStream();
         } catch (IOException direct) {
             directError = direct;
         }
         if (state != State.ON || port <= 0) throw directError;
         HttpURLConnection c = connect(url, new Proxy(Proxy.Type.HTTP, new InetSocketAddress("127.0.0.1", port)), connectMs, readMs);
-        applyPageHeaders(c, referer);
-        return c.getInputStream();
+        applyPageHeaders(c, url, referer);
+        try {
+            return c.getInputStream();
+        } catch (IOException viaWarp) {
+            viaWarp.addSuppressed(directError);
+            throw viaWarp;
+        }
     }
 
-    private static void applyPageHeaders(HttpURLConnection c, String referer) {
-        if (referer == null || referer.trim().isEmpty()) return;
-        c.setRequestProperty("Referer", referer);
+    /**
+     * Image hosts often use a different subdomain from the page (Supjav uses img.supjav.com).
+     * Cookies must therefore be looked up for the IMAGE URL, not just for the page Referer:
+     * CookieManager applies domain/path rules and returns cookies valid for that image host.
+     */
+    private static void applyPageHeaders(HttpURLConnection c, String imageUrl, String referer) {
+        c.setInstanceFollowRedirects(true);
+        c.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+        c.setRequestProperty("Accept-Language", "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7");
+        c.setRequestProperty("Cache-Control", "no-cache");
+        if (referer != null && !referer.trim().isEmpty()) c.setRequestProperty("Referer", referer);
         try {
-            String cookie = android.webkit.CookieManager.getInstance().getCookie(referer);
+            android.webkit.CookieManager cookies = android.webkit.CookieManager.getInstance();
+            String cookie = imageUrl == null ? null : cookies.getCookie(imageUrl);
+            if (cookie == null || cookie.isEmpty()) cookie = referer == null ? null : cookies.getCookie(referer);
             if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
         } catch (RuntimeException ignored) { }
     }
