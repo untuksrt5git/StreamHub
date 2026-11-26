@@ -131,6 +131,13 @@ public final class SiteScanActivity extends Activity {
         web.setBackgroundColor(Color.BLACK);
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
+            @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage m){
+                android.util.Log.w("StreamHubScan",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());
+                if(m.messageLevel()==android.webkit.ConsoleMessage.MessageLevel.ERROR && status!=null){
+                    status.setText("JavaScript situs memberi error: "+m.message());
+                }
+                return true;
+            }
         });
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
@@ -141,8 +148,18 @@ public final class SiteScanActivity extends Activity {
                 v.postDelayed(()->scan(false),4500);
             }
             @Override public void onPageFinished(WebView v,String url){
-                status.setText("Halaman selesai dimuat: "+url+" — pindai sekarang atau buka Videos/kategori.");
-                v.postDelayed(()->scan(false),2500);
+                status.setText("Halaman selesai dimuat: "+url+" — memeriksa isi halaman…");
+                v.evaluateJavascript("(function(){var b=document.body;return JSON.stringify({ready:document.readyState,title:document.title,host:location.hostname,bodyText:b?(b.innerText||'').trim().length:0,html:b?b.innerHTML.length:0,frames:document.querySelectorAll('iframe').length,scripts:document.scripts.length});})()",diag->{
+                    if(finished)return;
+                    try{
+                        String d=diag==null?"":diag;
+                        status.setText("Pemeriksaan Supjav: "+d+" — jika bodyText dan html 0, halaman tidak dikirim/ditampilkan oleh situs atau WebView.");
+                    }catch(Exception ignored){}
+                });
+                v.postDelayed(()->scan(false),3500);
+            }
+            @Override public void onReceivedHttpError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceResponse response){
+                if(request.isForMainFrame())status.setText("Server menolak halaman ("+response.getStatusCode()+" "+response.getReasonPhrase()+"). Ini bukan kegagalan pemilih katalog.");
             }
             @Override public void onReceivedError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceError error){
                 if(request.isForMainFrame())status.setText("Halaman gagal dimuat: "+error.getDescription()+". Coba Stop, Muat ulang, atau pindah ke domain aktif.");
