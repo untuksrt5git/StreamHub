@@ -32,6 +32,7 @@ public final class SiteScanActivity extends Activity {
     private String siteUrl, siteName, siteId, indexFile, siteRootUrl;
     private SiteAdapters.Profile adapter;
     private boolean finished, scanning, autoCrawl, periodicEnabled;
+    private int autoGeneration=0;
     private static final long PERIODIC_SCAN_MS=30L*60L*1000L;
     private final ArrayList<String> autoQueue=new ArrayList<>();
     private final LinkedHashSet<String> autoQueued=new LinkedHashSet<>();
@@ -41,6 +42,7 @@ public final class SiteScanActivity extends Activity {
     private String autoCurrentUrl="", autoCurrentCategory="";
     private int autoCompleted=0, autoDiscovered=0;
     private static final int AUTO_MAX_PAGES=120;
+    private static final int AUTO_MAX_PAGES_PER_CATEGORY=5;
     private final Runnable periodicScan=new Runnable(){@Override public void run(){
         if(finished||!periodicEnabled)return;
         if(!autoCrawl&&!scanning)beginAutoCrawl();
@@ -52,7 +54,7 @@ public final class SiteScanActivity extends Activity {
     private String lastResourceFailure="";
     private String lastAutoScanUrl="";
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");} };
+    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);} };
 
     private final String script =
         "(function(){try{" +
@@ -128,7 +130,7 @@ public final class SiteScanActivity extends Activity {
         bar.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
         Button stopButton=new Button(this);
         stopButton.setText("Stop");
-        stopButton.setOnClickListener(v->{periodicEnabled=false;handler.removeCallbacks(periodicScan);autoCrawl=false;autoQueue.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Pemindaian dihentikan. Hasil halaman yang sudah selesai tetap tersimpan.");}});
+        stopButton.setOnClickListener(v->{periodicEnabled=false;handler.removeCallbacks(periodicScan);autoCrawl=false;autoGeneration++;autoQueue.clear();autoQueued.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){web.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);status.setText("Scraping dijeda/dibatalkan. Antrean direset; hasil halaman yang sudah tersimpan tetap aman.");}});
         bar.addView(stopButton,new LinearLayout.LayoutParams(-2,-2));
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
@@ -457,7 +459,7 @@ public final class SiteScanActivity extends Activity {
 
     /** Start a same-site crawl of category and pagination links exposed by the current page. */
     private void startAutoCrawl(){
-        if(finished||web==null||scanning||autoCrawl)return;
+        if(finished||web==null||scanning||autoCrawl){if(status!=null&&scanning)status.setText("Pemindaian halaman sedang berlangsung. Tunggu selesai atau tekan Stop sebelum memulai ulang.");return;}
         periodicEnabled=true;
         handler.removeCallbacks(periodicScan);
         beginAutoCrawl();
@@ -466,6 +468,7 @@ public final class SiteScanActivity extends Activity {
 
     private void beginAutoCrawl(){
         if(finished||web==null||scanning||autoCrawl)return;
+        autoGeneration++;
         autoCrawl=true;autoQueue.clear();autoQueued.clear();autoVisited.clear();
         autoCategoryPageCounts.clear();autoPageCategories.clear();
         autoCompleted=0;autoDiscovered=0;
@@ -475,10 +478,31 @@ public final class SiteScanActivity extends Activity {
 
     private String autoKey(String address){
         if(address==null)return "";
-        String value=address.trim();
-        int hash=value.indexOf('#');if(hash>=0)value=value.substring(0,hash);
-        while(value.endsWith("/")&&value.length()>value.indexOf("://")+3)value=value.substring(0,value.length()-1);
-        return value;
+        try{
+            android.net.Uri u=android.net.Uri.parse(address.trim());
+            String scheme=u.getScheme()==null?"https":u.getScheme().toLowerCase(java.util.Locale.ROOT);
+            String host=u.getHost()==null?"":u.getHost().toLowerCase(java.util.Locale.ROOT);
+            if(host.startsWith("www."))host=host.substring(4);
+            if(host.isEmpty())return "";
+            String path=u.getEncodedPath()==null?"":u.getEncodedPath();
+            while(path.length()>1&&path.endsWith("/"))path=path.substring(0,path.length()-1);
+            java.util.ArrayList<String> query=new java.util.ArrayList<>();
+            java.util.Set<String> tracking=new java.util.HashSet<>(java.util.Arrays.asList("fbclid","gclid","dclid","msclkid","ref_src","igshid","mc_cid","mc_eid"));
+            String raw=u.getEncodedQuery()==null?"":u.getEncodedQuery();
+            for(String part:raw.split("&")){
+                if(part.isEmpty())continue;
+                String key=part.contains("=")?part.substring(0,part.indexOf('=')):part;
+                String decoded=android.net.Uri.decode(key).toLowerCase(java.util.Locale.ROOT);
+                if(decoded.startsWith("utm_")||tracking.contains(decoded))continue;
+                query.add(part);
+            }
+            java.util.Collections.sort(query);
+            StringBuilder out=new StringBuilder(scheme).append("://").append(host);
+            if(u.getPort()!=-1&&!(("http".equals(scheme)&&u.getPort()==80)||("https".equals(scheme)&&u.getPort()==443)))out.append(':').append(u.getPort());
+            out.append(path.isEmpty()?"/":path);
+            if(!query.isEmpty())out.append('?').append(android.text.TextUtils.join("&",query));
+            return out.toString();
+        }catch(Exception e){return address.trim();}
     }
 
     private void enqueueAuto(String address,String categoryKey){
@@ -490,7 +514,7 @@ public final class SiteScanActivity extends Activity {
             String root=SiteAdapters.host(siteRootUrl),host=SiteAdapters.host(value);
             if(root.isEmpty()||host.isEmpty()||!(host.equals(root)||host.endsWith("."+root)))return;
             int count=autoCategoryPageCounts.containsKey(category)?autoCategoryPageCounts.get(category):0;
-            if(count>=10)return;
+            if(count>=AUTO_MAX_PAGES_PER_CATEGORY)return;
             autoCategoryPageCounts.put(category,count+1);
             autoPageCategories.put(value,category);
             autoQueued.add(value);autoQueue.add(value);autoDiscovered++;
@@ -501,7 +525,7 @@ public final class SiteScanActivity extends Activity {
         if(!autoCrawl||finished||web==null)return;
         if(autoCompleted>=AUTO_MAX_PAGES||autoQueue.isEmpty()){
             autoCrawl=false;
-            status.setText("Putaran scraping selesai. "+autoCompleted+" halaman diproses dari halaman utama dan kategori (maksimal 10 halaman per kategori). "+autoDiscovered+" URL ditemukan. Katalog diperbarui; scan rutin "+(periodicEnabled?"aktif setiap 30 menit selama layar ini terbuka.":"nonaktif.")+
+            status.setText("Putaran scraping selesai. "+autoCompleted+" halaman diproses dari halaman utama dan kategori (maksimal "+AUTO_MAX_PAGES_PER_CATEGORY+" halaman per kategori). "+autoDiscovered+" URL ditemukan. Katalog diperbarui; scan rutin "+(periodicEnabled?"aktif setiap 30 menit selama layar ini terbuka.":"nonaktif.")+
                 (autoCompleted>=AUTO_MAX_PAGES?" Batas aman total "+AUTO_MAX_PAGES+" halaman tercapai.":""));
             Toast.makeText(this,"Crawler selesai: "+autoCompleted+" halaman",Toast.LENGTH_LONG).show();
             return;
@@ -526,8 +550,9 @@ public final class SiteScanActivity extends Activity {
             "var card=/(^|[\\s_-])(post|video|movie|item|entry|thumb|thumbnail|film|clip|card|media)([\\s_-]|$)/.test(cls)||!!(a.closest&&a.closest('article,.video,.movie,.post,.item,.entry,.thumb,.thumbnail,.card'));"+
             "var cat=/(^|\\/)(category|categories|tag|tags|genre|genres|archive)(\\/|$)/.test(p)||(!card&&(/(^|[\\s_-])(category|categories|cat-list|cat-item|genre|genres|menu|navigation|nav-menu|sidebar)([\\s_-]|$)/.test(cls))&&txt.length>1&&txt.length<80);"+
             "if(pag)add(a,'page');else if(cat)add(a,'category');}return JSON.stringify(out);}catch(e){return '[]';}})()";
+        final int generation=autoGeneration;
         web.evaluateJavascript(js,value->{
-            if(!autoCrawl)return;
+            if(!autoCrawl||generation!=autoGeneration)return;
             try{
                 Object parsed=new org.json.JSONTokener(value==null?"[]":value).nextValue();
                 if(parsed instanceof String)parsed=new org.json.JSONTokener((String)parsed).nextValue();
@@ -647,9 +672,7 @@ public final class SiteScanActivity extends Activity {
         String embed=video.optString("embedUrl","").trim();
         String value=!page.isEmpty()?page:embed;
         if(value.isEmpty())return "";
-        int hash=value.indexOf('#');
-        if(hash>=0)value=value.substring(0,hash);
-        return value.trim();
+        return autoKey(value);
     }
 
     private String stableVideoId(String identity) {
@@ -683,7 +706,7 @@ public final class SiteScanActivity extends Activity {
     }
 
     @Override protected void onDestroy(){
-        finished=true;periodicEnabled=false;autoCrawl=false;autoQueue.clear();handler.removeCallbacksAndMessages(null);
+        finished=true;periodicEnabled=false;autoCrawl=false;autoGeneration++;autoQueue.clear();autoQueued.clear();handler.removeCallbacksAndMessages(null);
         if(web!=null){web.stopLoading();web.loadUrl("about:blank");web.destroy();web=null;}
         super.onDestroy();
     }
