@@ -245,6 +245,9 @@ public final class SiteScanActivity extends Activity {
         scanPasses=0;scanStableBottom=0;scanLastHeight=-1;domNullRetries=0;
         handler.removeCallbacks(scanWatchdog);
         handler.postDelayed(scanWatchdog,90000);
+        // Stop the automatic poster warm-up before scanning. Both routines scroll the same
+        // WebView; running them together can make the scanner miss lazy-loaded cards.
+        web.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);
         status.setText("Menyiapkan pemindaian "+adapter.name+" — memicu pemuatan gambar dan konten bertahap…");
         waitForPageReady(generation,manual,0);
     }
@@ -258,9 +261,17 @@ public final class SiteScanActivity extends Activity {
         String probe="JSON.stringify({ready:document.readyState,images:document.images?document.images.length:0,loaded:(function(){var n=0,a=document.images||[];for(var i=0;i<a.length;i++)if(a[i].complete&&a[i].naturalWidth>0)n++;return n;})(),height:Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0)})";
         web.evaluateJavascript(probe,value->{
             if(!isScanCurrent(generation))return;
-            boolean ready=value!=null&&value.contains("complete");
+            String readyState="unknown"; int imageCount=0,loadedCount=0;
+            try{
+                JSONObject state=parseJsObject(value);
+                readyState=state.optString("ready","unknown");
+                imageCount=state.optInt("images",0);
+                loadedCount=state.optInt("loaded",0);
+            }catch(Exception ignored){}
+            boolean ready="interactive".equalsIgnoreCase(readyState)||"complete".equalsIgnoreCase(readyState);
             if(!ready&&attempt<15){
-                status.setText("Menunggu halaman stabil… pemeriksaan "+(attempt+1)+"/15 • "+(value==null?"belum ada respons":value));
+                status.setText("Menunggu halaman siap… pemeriksaan "+(attempt+1)+"/15 • status: "+readyState+
+                    " • gambar: "+loadedCount+"/"+imageCount);
                 handler.postDelayed(()->waitForPageReady(generation,manual,attempt+1),800);
                 return;
             }
