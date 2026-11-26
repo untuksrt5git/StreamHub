@@ -2849,27 +2849,44 @@ public class Home extends Activity {
         }
         focusable(card, dp(12));
         card.setOnClickListener(v -> {
-            // Website playback remains the default (UC-like WebView); the user can choose the source page
-            // or try the native player when the saved URL is a directly playable media URL.
+            String sourcePage = pageUrl.matches("(?i)^https?://.+") ? pageUrl : playUrl;
+            String embedPage = playUrl.matches("(?i)^https?://.+") ? playUrl : sourcePage;
             new AlertDialog.Builder(this).setTitle(title)
-                .setItems(new String[]{"Putar di StreamHub (utama)", "Buka halaman video sumber", "Coba player native"},
+                .setItems(new String[]{"Putar di StreamHub (halaman video)", "Buka embed/player sumber", "Coba player native"},
                     (dialog, choice) -> {
+                        String host = Uri.parse(sourcePage).getHost();
+                        if (host == null || host.isEmpty()) host = title;
                         if (choice == 0) {
-                            String sourceName = Uri.parse(playUrl).getHost();
-                            if (sourceName == null || sourceName.isEmpty()) sourceName = title;
-                            startActivity(WebActivity.open(this, title, playUrl, playUrl));
+                            // Start at the actual video detail page so WebActivity can run the site's JS player
+                            // and its stream sniffer; do not mistake a listing iframe for a playable media URL.
+                            startActivity(WebActivity.open(this, host, sourcePage, sourcePage));
                         } else if (choice == 1) {
-                            String target = pageUrl.matches("(?i)^https?://.+") ? pageUrl : playUrl;
-                            startActivity(WebActivity.open(this, title, target, target));
-                        } else {
+                            startActivity(WebActivity.open(this, host, sourcePage, embedPage));
+                        } else if (isDirectMediaUrl(embedPage)) {
                             Map<String, String> headers = new HashMap<>();
-                            if (pageUrl.matches("(?i)^https?://.+")) headers.put("Referer", pageUrl);
-                            boolean dash = playUrl.toLowerCase(java.util.Locale.ROOT).contains(".mpd");
-                            startActivity(PlayerActivity.open(this, playUrl, dash, headers, new ArrayList<>(), title));
+                            headers.put("Referer", sourcePage);
+                            String lower = embedPage.toLowerCase(java.util.Locale.ROOT);
+                            boolean dash = lower.matches(".*\\\\.mpd(?:[?#].*)?$");
+                            startActivity(PlayerActivity.open(this, embedPage, dash, headers, new ArrayList<>(), title)
+                                .putExtra("pageTitle", title).putExtra("pageUrl", sourcePage).putExtra("site", host).putExtra("siteUrl", sourcePage));
+                        } else {
+                            Toast.makeText(this, "URL katalog ini masih berupa halaman HTML/iframe, bukan URL video langsung. StreamHub akan membuka halaman sumber; gunakan tombol Player di halaman setelah stream terdeteksi.", Toast.LENGTH_LONG).show();
+                            startActivity(WebActivity.open(this, host, sourcePage, sourcePage));
                         }
                     }).show();
         });
         return card;
+    }
+
+
+    /** Only direct media manifests/files belong in Media3; HTML pages and iframe wrappers must stay in WebView. */
+    boolean isDirectMediaUrl(String address) {
+        if (address == null || !address.matches("(?i)^https?://.+")) return false;
+        String path;
+        try { path = Uri.parse(address).getPath(); } catch (Exception e) { return false; }
+        if (path == null) return false;
+        String p = path.toLowerCase(java.util.Locale.ROOT);
+        return p.matches(".*\\\\.(m3u8|mpd|mp4|m4v|webm|mov|mkv|ts|m4a|mp3|aac|ogg)$");
     }
 
     void showSiteIndex(Sites.Site site) {
