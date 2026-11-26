@@ -184,6 +184,16 @@ public final class SiteScanActivity extends Activity {
         File f=new File(getFilesDir(),indexFile);
         JSONObject root=new JSONObject();
         try{root=new JSONObject(Sources.read(f));}catch(Exception ignored){}
+        // Older builds keyed the JS index by the redirected/current URL. Recover those
+        // entries once when the stable website index is still empty.
+        if(root.optJSONArray("videos")==null || root.optJSONArray("videos").length()==0){
+            File legacy=new File(getFilesDir(),WebsiteIndexer.fileName(CustomSites.id(siteUrl)));
+            if(!legacy.equals(f) && legacy.exists()){
+                try{JSONObject previous=new JSONObject(Sources.read(legacy));
+                    if(previous.optJSONArray("videos")!=null)root=previous;
+                }catch(Exception ignored){}
+            }
+        }
         JSONArray pages=root.optJSONArray("pages");if(pages==null)pages=new JSONArray();
         JSONArray media=root.optJSONArray("media");if(media==null)media=new JSONArray();
         JSONArray embeds=root.optJSONArray("embeds");if(embeds==null)embeds=new JSONArray();
