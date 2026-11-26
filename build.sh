@@ -8,7 +8,7 @@ SDK=${ANDROID_HOME:-$HOME/Library/Android/sdk}
 BT=$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)   # newest build-tools installed
 JAR=$SDK/platforms/android-34/android.jar
 LIBS=$(ls libs/*.jar | tr '\n' ':')
-VERSION_CODE=${VERSION_CODE:-22400}
+VERSION_CODE=${VERSION_CODE:-22401}
 VERSION_NAME=${VERSION_NAME:-2.24.0}   # CI overrides both from the release tag
 VERSION="--version-code $VERSION_CODE --version-name $VERSION_NAME"
 cd "$(dirname "$0")"
@@ -30,6 +30,8 @@ $BT/aapt2 link -o build/r.apk -I "$JAR" --manifest AndroidManifest.xml --custom-
   --min-sdk-version 26 --target-sdk-version 34 $VERSION
 javac -encoding UTF-8 -nowarn -Xlint:-options -source 8 -target 8 -bootclasspath "$JAR:$BT/core-lambda-stubs.jar" -classpath "$LIBS" \
   -d build/classes $(find src build/me -name '*.java')
+# Fail the build if the JS scanner Activity is not compiled into the APK.
+test -f build/classes/me/champdev/weblock/SiteScanActivity.class || { echo "ERROR: SiteScanActivity.class was not compiled"; exit 1; }
 $BT/d8 --lib "$JAR" --min-api 26 --output build $(find build/classes -name '*.class') $(ls libs/*.jar)
 mkdir -p build/lib && cp -R jni/* build/lib/
 
@@ -40,6 +42,9 @@ pack() { # $1 = tv | android, $2 = manifest, $3 = output name
   (cd build && zip -q $1.apk classes*.dex && zip -qr $1.apk lib)
   $BT/zipalign -f -p 4 build/$1.apk build/$1-aligned.apk
   $BT/apksigner sign --ks release.jks --ks-pass file:release.pass --v4-signing-enabled false --out "$3" build/$1-aligned.apk
+  # Verify both manifest registration and the actual DEX class in every output APK.
+  "$BT/aapt" dump xmltree "$3" AndroidManifest.xml | grep -q 'me.champdev.weblock.SiteScanActivity' || { echo "ERROR: SiteScanActivity missing from APK manifest: $3"; exit 1; }
+  unzip -p "$3" classes.dex | strings | grep -q 'Lme/champdev/weblock/SiteScanActivity;' || { echo "ERROR: SiteScanActivity missing from APK DEX: $3"; exit 1; }
   echo "built $(pwd)/$3"
 }
 # The phone build has no TV launcher entry and no TV banner
