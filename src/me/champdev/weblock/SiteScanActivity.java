@@ -166,11 +166,13 @@ public final class SiteScanActivity extends Activity {
         java.util.HashSet<String> seen=new java.util.HashSet<>();
         for(int i=0;oldVideos!=null&&i<oldVideos.length();i++){
             JSONObject v=oldVideos.optJSONObject(i);if(v==null)continue;
+            normalizeVideo(v);
             String key=v.optString("pageUrl","")+"|"+v.optString("poster","");
             if(seen.add(key))merged.put(v);
         }
         for(int i=0;i<videos.length();i++){
             JSONObject v=videos.optJSONObject(i);if(v==null)continue;
+            normalizeVideo(v);
             String key=v.optString("pageUrl","")+"|"+v.optString("poster","");
             if(seen.add(key))merged.put(v);
             String embed=v.optString("embedUrl","");
@@ -197,6 +199,27 @@ public final class SiteScanActivity extends Activity {
         try(FileOutputStream out=new FileOutputStream(tmp)){out.write(root.toString(2).getBytes("UTF-8"));out.getFD().sync();}
         if(f.exists()&&!f.delete())throw new java.io.IOException("Gagal mengganti indeks lama");
         if(!tmp.renameTo(f))throw new java.io.IOException("Gagal menyimpan indeks");
+    }
+
+
+    private void normalizeVideo(JSONObject video) throws Exception {
+        String page=video.optString("pageUrl","");
+        String embed=video.optString("embedUrl","");
+        String identity=page.isEmpty()?embed:page;
+        video.put("schema","streamhub.catalog.v1")
+            .put("id",Integer.toHexString(identity.hashCode()))
+            .put("category",categoryFor(page))
+            .put("sourceHost",SiteAdapters.host(embed).isEmpty()?SiteAdapters.host(page):SiteAdapters.host(embed))
+            .put("updatedAt",System.currentTimeMillis());
+        if(video.optString("title","").trim().isEmpty()) video.put("title","Video");
+    }
+
+    private String categoryFor(String address) {
+        String p=address==null?"":address.toLowerCase(java.util.Locale.ROOT);
+        if(p.contains("episode")||p.contains("season")||p.matches(".*[/_-]ep[-_]?\\\\d+.*")) return "episode";
+        if(p.contains("series")||p.contains("drama")||p.contains("tv-show")) return "series";
+        if(p.contains("movie")||p.contains("film")||p.contains("video")||p.contains("watch")) return "video";
+        return "catalog";
     }
 
     @Override protected void onDestroy(){
