@@ -2757,7 +2757,7 @@ public class Home extends Activity {
                     String origin = video.optString("sourceHost", "");
                     try {
                         String actual = Uri.parse(embed).getHost();
-                        if (actual != null && !actual.isEmpty()) origin = actual.replaceFirst("(?i)^www\\\\.", "").toLowerCase(java.util.Locale.ROOT);
+                        if (actual != null && !actual.isEmpty()) origin = actual.replaceFirst("(?i)^www\\.", "").toLowerCase(java.util.Locale.ROOT);
                     } catch (Exception ignored) { }
                     if (origin.isEmpty()) origin = site.name;
                     if (!byOrigin.containsKey(origin)) byOrigin.put(origin, new ArrayList<>());
@@ -2832,7 +2832,7 @@ public class Home extends Activity {
             loadImage(brandLogo, logo, null, 96);
         }
         String host = Uri.parse(playUrl).getHost();
-        String label = !brand.isEmpty() ? brand : host == null ? "Sumber video" : host.replaceFirst("^www\\\\.", "");
+        String label = !brand.isEmpty() ? brand : host == null ? "Sumber video" : host.replaceFirst("^www\\.", "");
         TextView source = text(label, sp(10, 9), MUTED, true);
         source.setMaxLines(1);
         source.setEllipsize(TextUtils.TruncateAt.END);
@@ -2866,7 +2866,7 @@ public class Home extends Activity {
                             Map<String, String> headers = new HashMap<>();
                             headers.put("Referer", sourcePage);
                             String lower = embedPage.toLowerCase(java.util.Locale.ROOT);
-                            boolean dash = lower.matches(".*\\\\.mpd(?:[?#].*)?$");
+                            boolean dash = lower.matches(".*\\.mpd(?:[?#].*)?$");
                             startActivity(PlayerActivity.open(this, embedPage, dash, headers, new ArrayList<>(), title)
                                 .putExtra("pageTitle", title).putExtra("pageUrl", sourcePage).putExtra("site", host).putExtra("siteUrl", sourcePage));
                         } else {
@@ -2886,7 +2886,7 @@ public class Home extends Activity {
         try { path = Uri.parse(address).getPath(); } catch (Exception e) { return false; }
         if (path == null) return false;
         String p = path.toLowerCase(java.util.Locale.ROOT);
-        return p.matches(".*\\\\.(m3u8|mpd|mp4|m4v|webm|mov|mkv|ts|m4a|mp3|aac|ogg)$");
+        return p.matches(".*\\.(m3u8|mpd|mp4|m4v|webm|mov|mkv|ts|m4a|mp3|aac|ogg)$");
     }
 
     void showSiteIndex(Sites.Site site) {
