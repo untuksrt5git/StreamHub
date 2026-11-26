@@ -2981,11 +2981,12 @@ public class Home extends Activity {
             String embedPage = playUrl.matches("(?i)^https?://.+") ? playUrl : sourcePage;
             String playbackHost = Uri.parse(sourcePage).getHost();
             if (playbackHost == null || playbackHost.isEmpty()) playbackHost = title;
+            final String hostForPlayback = playbackHost;
             new AlertDialog.Builder(this).setTitle(title)
                 .setItems(new String[]{"Putar otomatis di StreamHub", "Buka embed/player sumber", "Coba player native"},
                     (dialog, choice) -> {
-                        if (choice == 0) startActivity(WebActivity.open(this, playbackHost, sourcePage, sourcePage));
-                        else if (choice == 1) startActivity(WebActivity.open(this, playbackHost, sourcePage, embedPage));
+                        if (choice == 0) startActivity(WebActivity.open(this, hostForPlayback, sourcePage, sourcePage));
+                        else if (choice == 1) startActivity(WebActivity.open(this, hostForPlayback, sourcePage, embedPage));
                         else if (isDirectMediaUrl(embedPage)) {
                             Map<String, String> headers = new HashMap<>();
                             headers.put("Referer", sourcePage);
@@ -2993,10 +2994,10 @@ public class Home extends Activity {
                             boolean dash = lower.matches(".*\\.mpd(?:[?#].*)?$");
                             startActivity(PlayerActivity.open(this, embedPage, dash, headers, new ArrayList<>(), title)
                                 .putExtra("mime", mediaMime(embedPage)).putExtra("pageTitle", title)
-                                .putExtra("pageUrl", sourcePage).putExtra("site", playbackHost).putExtra("siteUrl", sourcePage));
+                                .putExtra("pageUrl", sourcePage).putExtra("site", hostForPlayback).putExtra("siteUrl", sourcePage));
                         } else {
                             Toast.makeText(this, "Belum ada URL media langsung. Buka halaman sumber agar StreamHub mencoba mendeteksi videonya.", Toast.LENGTH_LONG).show();
-                            startActivity(WebActivity.open(this, playbackHost, sourcePage, sourcePage));
+                            startActivity(WebActivity.open(this, hostForPlayback, sourcePage, sourcePage));
                         }
                     }).show();
             return true;
