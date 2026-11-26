@@ -2874,6 +2874,7 @@ public class Home extends Activity {
             String poster = video.optString("poster", "");
             String embedUrl = video.optString("embedUrl", "");
             String pageUrl = video.optString("pageUrl", "");
+            String posterReferer = video.optString("posterReferer", pageUrl);
             String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
             if (playUrl.isEmpty()) continue;
             if (row == null || inRow >= columns) {
@@ -2883,7 +2884,7 @@ public class Home extends Activity {
                 col.addView(row);
                 inRow = 0;
             }
-            row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")), new LinearLayout.LayoutParams(0, -2, 1));
+            row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer, video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")), new LinearLayout.LayoutParams(0, -2, 1));
             inRow++;
         }
         if (row != null && inRow < columns) while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
@@ -2907,7 +2908,7 @@ public class Home extends Activity {
         col.addView(pager);
     }
 
-    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl, String brand, String logo, String description) {
+    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl, String posterReferer, String brand, String logo, String description) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(5), dp(5), dp(5), dp(12));
@@ -2925,7 +2926,7 @@ public class Home extends Activity {
         placeholder.setBackground(rounded(CARD_HI, dp(9)));
         frame.addView(placeholder, new FrameLayout.LayoutParams(-1, dp(imageHeight)));
         card.addView(frame);
-        if (poster.startsWith("http")) loadImage(image, poster, placeholder, App.tv ? 480 : 240, pageUrl);
+        if (poster.startsWith("http")) loadImage(image, poster, placeholder, App.tv ? 480 : 240, posterReferer.isEmpty() ? pageUrl : posterReferer);
         TextView name = text(title, sp(14, 12), TEXT, true);
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
