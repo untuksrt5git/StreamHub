@@ -34,9 +34,9 @@ public final class SiteScanActivity extends Activity {
     private int scanGeneration, scanPasses, scanStableBottom, scanLastHeight=-1;
     private int resourceHttpErrors, resourceNetworkErrors;
     private String lastResourceFailure="";
-    private static final int MAX_SCROLL_PASSES=24;
+    private static final int MAX_SCROLL_PASSES=32;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Halaman mungkin masih memuat konten atau menahan JavaScript. Coba lagi setelah halaman stabil.");} };
+    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");} };
 
     private final String script =
         "(function(){try{" +
@@ -212,7 +212,7 @@ public final class SiteScanActivity extends Activity {
         final int generation=++scanGeneration;
         scanPasses=0;scanStableBottom=0;scanLastHeight=-1;
         handler.removeCallbacks(scanWatchdog);
-        handler.postDelayed(scanWatchdog,45000);
+        handler.postDelayed(scanWatchdog,90000);
         status.setText("Menyiapkan pemindaian "+adapter.name+" — memicu pemuatan gambar dan konten bertahap…");
         web.evaluateJavascript("(function(){window.__shScanOriginalY=window.scrollY||0;window.scrollTo(0,0);return 'ready';})()",value->{
             if(!isScanCurrent(generation))return;
@@ -249,13 +249,40 @@ public final class SiteScanActivity extends Activity {
                 if(stable||hitLimit){
                     final boolean limited=hitLimit;
                     status.setText("Pemuatan bertahap selesai. Menunggu gambar dan mengumpulkan tautan…");
-                    waitForImages(generation,manual,limited,0);
+                    activateLazyImages(generation,manual,limited);
                 }else{
                     handler.postDelayed(()->scanScrollStep(generation,manual),650);
                 }
             }catch(Exception e){
                 finishScanError(generation,"Gagal memeriksa proses scroll: "+e.getMessage());
             }
+        });
+    }
+
+    // Promote common lazy-load attributes to real image requests after scrolling the page.
+    // This is limited to public image URLs already exposed by the page; it does not bypass site access controls.
+    private void activateLazyImages(int generation,boolean manual,boolean scrollLimited){
+        if(!isScanCurrent(generation))return;
+        String activate="(function(){try{var promoted=0,backgrounds=0;"+
+            "function first(v){if(!v)return '';return String(v).split(',')[0].trim().split(/\\s+/)[0];}"+
+            "var nodes=document.querySelectorAll('img,source');"+
+            "for(var i=0;i<nodes.length;i++){var n=nodes[i];"+
+            "var src=n.getAttribute('data-src')||n.getAttribute('data-lazy-src')||n.getAttribute('data-original-src')||n.getAttribute('data-original')||n.getAttribute('data-lazy')||n.getAttribute('data-image')||n.getAttribute('data-poster')||n.getAttribute('data-thumb');"+
+            "var set=n.getAttribute('data-srcset')||n.getAttribute('data-lazy-srcset')||n.getAttribute('data-original-srcset');"+
+            "if(set&&!n.getAttribute('srcset')){n.setAttribute('srcset',set);promoted++;}"+
+            "if(src&&n.tagName.toLowerCase()==='img'&&(!n.getAttribute('src')||/^(about:blank|data:image\\/(gif|svg))/i.test(n.getAttribute('src')))){n.setAttribute('src',src);promoted++;}"+
+            "if(n.tagName.toLowerCase()==='img'){try{n.loading='eager';}catch(e){}}"+
+            "}"+
+            "var bg=document.querySelectorAll('[data-bg],[data-background],[data-background-image]');"+
+            "for(var j=0;j<bg.length;j++){var el=bg[j],u=el.getAttribute('data-bg')||el.getAttribute('data-background')||el.getAttribute('data-background-image');"+
+            "if(u&&!el.style.backgroundImage){el.style.backgroundImage='url('+JSON.stringify(u).slice(1,-1)+')';backgrounds++;}}"+
+            "try{window.dispatchEvent(new Event('scroll'));window.dispatchEvent(new Event('resize'));}catch(e){}"+
+            "return JSON.stringify({promoted:promoted,backgrounds:backgrounds,images:document.images.length});"+
+            "}catch(e){return JSON.stringify({error:String(e)});}})()";
+        status.setText("Mengaktifkan sumber gambar tertunda…");
+        web.evaluateJavascript(activate,value->{
+            if(!isScanCurrent(generation))return;
+            handler.postDelayed(()->waitForImages(generation,manual,scrollLimited,0),1200);
         });
     }
 
@@ -266,9 +293,9 @@ public final class SiteScanActivity extends Activity {
             if(!isScanCurrent(generation))return;
             try{
                 JSONObject p=parseJsObject(value);int pending=p.optInt("pending",0);
-                if(pending>0&&attempt<5){
+                if(pending>0&&attempt<12){
                     status.setText("Menunggu gambar dimuat… "+p.optInt("loaded",0)+"/"+p.optInt("total",0)+" berhasil, "+pending+" masih berjalan");
-                    handler.postDelayed(()->waitForImages(generation,manual,scrollLimited,attempt+1),650);
+                    handler.postDelayed(()->waitForImages(generation,manual,scrollLimited,attempt+1),900);
                 }else runDomScan(generation,manual,scrollLimited);
             }catch(Exception e){runDomScan(generation,manual,scrollLimited);}
         });
