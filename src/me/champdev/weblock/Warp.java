@@ -259,7 +259,7 @@ final class Warp {
      */
     private static void applyPageHeaders(HttpURLConnection c, String imageUrl, String referer) {
         c.setInstanceFollowRedirects(true);
-        c.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+        c.setRequestProperty("Accept", "image/webp,image/apng,image/svg+xml,image/jpeg,image/*,*/*;q=0.8");
         c.setRequestProperty("Accept-Language", "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7");
         c.setRequestProperty("Cache-Control", "no-cache");
         if (referer != null && !referer.trim().isEmpty()) c.setRequestProperty("Referer", referer);
