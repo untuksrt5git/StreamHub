@@ -348,6 +348,8 @@ public class Home extends Activity {
     String indexedCategoryFilter = "";
     int indexedCatalogPage = 0;
     int indexedCatalogPageSize = 20;
+    String indexedSearchQuery = "";
+    int indexedSortMode = 0; // 0 = urutan sumber, 1 = A-Z, 2 = Z-A
 
     /** Loads the open tab again: catalog lists from the network, and the site lists (Sports, Home) or the channels (IPTV). */
     void refresh() {
@@ -2827,6 +2829,38 @@ public class Home extends Activity {
         filters.addView(typeButton, typeLp);
         col.addView(filters);
 
+        LinearLayout searchTools = new LinearLayout(this);
+        searchTools.setOrientation(LinearLayout.HORIZONTAL);
+        searchTools.setGravity(Gravity.CENTER_VERTICAL);
+        searchTools.setPadding(0, 0, 0, dp(8));
+        TextView searchButton = text(indexedSearchQuery.isEmpty() ? "Cari video  ⌕" : "Cari: " + indexedSearchQuery + "  ✕", sp(12, 10), TEXT, true);
+        searchButton.setPadding(dp(10), dp(9), dp(10), dp(9));
+        searchButton.setSingleLine();
+        searchButton.setEllipsize(TextUtils.TruncateAt.END);
+        searchButton.setBackground(rounded(CARD_HI, dp(9)));
+        searchButton.setOnClickListener(v -> {
+            EditText query = new EditText(this);
+            query.setSingleLine(true);
+            query.setHint("Judul, nama situs, atau kata kunci");
+            query.setInputType(InputType.TYPE_CLASS_TEXT);
+            query.setText(indexedSearchQuery);
+            query.setSelection(query.length());
+            new AlertDialog.Builder(this).setTitle("Cari di katalog video").setView(query)
+                .setPositiveButton("Terapkan", (d, w) -> { indexedSearchQuery = query.getText().toString().trim(); indexedCatalogPage = 0; build(); })
+                .setNeutralButton("Hapus", (d, w) -> { indexedSearchQuery = ""; indexedCatalogPage = 0; build(); })
+                .setNegativeButton(android.R.string.cancel, null).show();
+        });
+        searchTools.addView(searchButton, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView sortButton = text("Urut: " + (indexedSortMode == 1 ? "A–Z" : indexedSortMode == 2 ? "Z–A" : "Asli") + " ▾", sp(12, 10), TEXT, true);
+        sortButton.setPadding(dp(10), dp(9), dp(10), dp(9));
+        sortButton.setBackground(rounded(CARD_HI, dp(9)));
+        LinearLayout.LayoutParams sortLp = new LinearLayout.LayoutParams(-2, -2);
+        sortLp.leftMargin = dp(6);
+        sortButton.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("Urutkan katalog")
+            .setItems(new String[]{"Urutan sumber", "Judul A–Z", "Judul Z–A"}, (d, which) -> { indexedSortMode = which; indexedCatalogPage = 0; build(); }).show());
+        searchTools.addView(sortButton, sortLp);
+        col.addView(searchTools);
+
         List<org.json.JSONObject> filtered = new ArrayList<>();
         for (Map.Entry<String, List<org.json.JSONObject>> group : byOrigin.entrySet()) {
             if (!indexedOriginFilter.isEmpty() && !indexedOriginFilter.equals(group.getKey())) continue;
@@ -2836,6 +2870,16 @@ public class Home extends Activity {
                 filtered.add(video);
             }
         }
+        if (!indexedSearchQuery.isEmpty()) {
+            String q = indexedSearchQuery.toLowerCase(java.util.Locale.ROOT);
+            filtered.removeIf(video -> !(video.optString("title").toLowerCase(java.util.Locale.ROOT).contains(q)
+                || video.optString("brand").toLowerCase(java.util.Locale.ROOT).contains(q)
+                || video.optString("description").toLowerCase(java.util.Locale.ROOT).contains(q)));
+        }
+        if (indexedSortMode != 0) filtered.sort((a, b) -> {
+            int order = a.optString("title", "").compareToIgnoreCase(b.optString("title", ""));
+            return indexedSortMode == 1 ? order : -order;
+        });
         int total = filtered.size();
         int pages = Math.max(1, (total + indexedCatalogPageSize - 1) / indexedCatalogPageSize);
         indexedCatalogPage = Math.max(0, Math.min(indexedCatalogPage, pages - 1));
@@ -2846,7 +2890,7 @@ public class Home extends Activity {
         TextView sizeButton = text("Per halaman: " + indexedCatalogPageSize + " ▾", sp(12, 10), MUTED, true);
         sizeButton.setPadding(dp(8), dp(8), dp(8), dp(8));
         sizeButton.setOnClickListener(v -> {
-            String[] sizes = {"12", "20", "30", "40"};
+            String[] sizes = {"12", "20", "30", "40", "60", "96"};
             new AlertDialog.Builder(this).setTitle("Jumlah video per halaman").setItems(sizes, (d, which) -> {
                 indexedCatalogPageSize = Integer.parseInt(sizes[which]); indexedCatalogPage = 0; build();
             }).show();
