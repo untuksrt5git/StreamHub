@@ -75,7 +75,7 @@ public final class SiteScanActivity extends Activity {
         "if(!title)continue;var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
         "var key=href.split('#')[0];if(seen[key])continue;seen[key]=1;" +
         "var frame=card.querySelector('iframe[src]'),embed=frame?abs(frame.getAttribute('src')):href,host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
-        "out.push({title:title,poster:poster||'',pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
+        "out.push({title:title,poster:poster||'',posterReferer:location.href,pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
         "}" +
         "var imgs=document.images||[],loaded=0,failed=0,lazy=0;for(var ii=0;ii<imgs.length;ii++){var im=imgs[ii];if(im.naturalWidth>0)loaded++;else if(im.complete&&(im.currentSrc||im.src))failed++;if(im.getAttribute('loading')==='lazy'||im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||im.getAttribute('data-original')||im.getAttribute('data-srcset'))lazy++;}" +
         "var posterCount=0;for(var oi=0;oi<out.length;oi++)if(out[oi].poster)posterCount++;" +
@@ -470,6 +470,8 @@ public final class SiteScanActivity extends Activity {
                     if(existing!=null&&key.equals(existing.optString("pageUrl",existing.optString("embedUrl","")))){
                         String freshPoster=v.optString("poster","");
                         if(!freshPoster.isEmpty()&&!freshPoster.equals(existing.optString("poster","")))existing.put("poster",freshPoster);
+                        String freshReferer=v.optString("posterReferer",result.optString("page",siteUrl));
+                        if(!freshReferer.isEmpty())existing.put("posterReferer",freshReferer);
                         String oldTitle=existing.optString("title","");
                         String freshTitle=v.optString("title","");
                         boolean oldTitleInvalid=oldTitle.trim().isEmpty()||oldTitle.matches("(?i)^(video|body a site|a site|site body|body|untitled)$");
