@@ -2760,13 +2760,8 @@ public class Home extends Activity {
                 for (int i = 0; videos != null && i < videos.length(); i++) {
                     org.json.JSONObject video = videos.optJSONObject(i);
                     if (video == null) continue;
-                    String embed = video.optString("embedUrl", "");
-                    String origin = video.optString("sourceHost", "");
-                    try {
-                        String actual = Uri.parse(embed).getHost();
-                        if (actual != null && !actual.isEmpty()) origin = actual.replaceFirst("(?i)^www\\.", "").toLowerCase(java.util.Locale.ROOT);
-                    } catch (Exception ignored) { }
-                    if (origin.isEmpty()) origin = site.name;
+                    // Group by the website the user added, not the third-party embed/player host.
+                    String origin = site.name == null || site.name.isEmpty() ? Uri.parse(site.url).getHost() : site.name;
                     if (!byOrigin.containsKey(origin)) byOrigin.put(origin, new ArrayList<>());
                     byOrigin.get(origin).add(video);
                 }
@@ -3044,7 +3039,11 @@ public class Home extends Activity {
 
     /** What tapping a site card does; the title page overrides it to search for the title there. */
     void openSite(Sites.Site s) {
-        startActivity(WebActivity.open(this, s.name, s.url, s.currentUrl.isEmpty() ? s.url : s.currentUrl));
+        Intent intent = WebActivity.open(this, s.name, s.url, s.currentUrl.isEmpty() ? s.url : s.currentUrl);
+        intent.putExtra("siteId", CustomSites.id(s.url))
+            .putExtra("indexFile", s.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(s.url)) : s.indexFile)
+            .putExtra("siteRootUrl", s.url);
+        startActivity(intent);
     }
 
     /** True for the site card that is the title page's current pick (it gets an outline). */
