@@ -2888,6 +2888,10 @@ public class Home extends Activity {
         int usableWidth = Math.max(240, screenWidthDp - 2 * side);
         int minCardWidth = App.tv ? 190 : (getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 150 : 142);
         int columns = Math.max(2, Math.min(App.tv ? 6 : 5, usableWidth / minCardWidth));
+        // Match Movie Series posters: portrait 2:3 (posterCard uses width x width*3/2).
+        // Catalog cards fill their grid cell, so derive the height from that cell's available width.
+        int indexedPosterWidth = Math.max(1, usableWidth / columns - 17);
+        int indexedPosterHeight = indexedPosterWidth * 3 / 2;
 
         if (total == 0) {
             col.addView(note("Tidak ada video untuk filter ini. Pilih kelompok atau jenis lain."));
@@ -2930,7 +2934,7 @@ public class Home extends Activity {
                         inRow = 0;
                     }
                     row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer,
-                        video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")),
+                        video.optString("brand", ""), video.optString("logo", ""), video.optString("description", ""), indexedPosterHeight),
                         new LinearLayout.LayoutParams(0, -2, 1));
                     inRow++;
                 }
@@ -2986,7 +2990,7 @@ public class Home extends Activity {
                 inRow = 0;
             }
             row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer,
-                video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")),
+                video.optString("brand", ""), video.optString("logo", ""), video.optString("description", ""), indexedPosterHeight),
                 new LinearLayout.LayoutParams(0, -2, 1));
             inRow++;
         }
@@ -3012,7 +3016,7 @@ public class Home extends Activity {
         col.addView(pager);
     }
 
-    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl, String posterReferer, String brand, String logo, String description) {
+    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl, String posterReferer, String brand, String logo, String description, int posterHeight) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(5), dp(5), dp(5), dp(12));
@@ -3021,7 +3025,7 @@ public class Home extends Activity {
         card.setLayoutParams(cp);
         card.setBackground(rounded(CARD, dp(12)));
         FrameLayout frame = new FrameLayout(this);
-        int imageHeight = App.tv ? 220 : 164;
+        int imageHeight = posterHeight;
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         frame.addView(image, new FrameLayout.LayoutParams(-1, dp(imageHeight)));
