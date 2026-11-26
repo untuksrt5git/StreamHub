@@ -40,15 +40,17 @@ public final class SiteScanActivity extends Activity {
         "for(var i=0;i<anchors.length&&out.length<180;i++){" +
         "var a=anchors[i],img=a.querySelector('img');" +
         "if(!img){var p0=a.parentElement; if(p0&&p0.querySelectorAll('img').length===1)img=p0.querySelector('img');}" +
-        "if(!img)continue;" +
+        "var box=a;for(var up0=0;up0<4&&box&&box.parentElement;up0++){if(/video|movie|post|thumb|poster|entry|item|card|media|film/i.test(String(box.className||'')+' '+String(box.parentElement.className||''))){box=box.parentElement;break;}box=box.parentElement;}" +
+        "var styleText=(box&&box.getAttribute?((box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):''),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
+        "if(!img&&!bgMatch)continue;" +
         "var href=abs(a.getAttribute('href'));if(!href)continue;" +
         "var hu;try{hu=new URL(href);}catch(e){continue;}" +
         "if(!/^https?:$/.test(hu.protocol)||hu.hostname!==location.hostname||href.split('#')[0]===location.href.split('#')[0])continue;" +
         "if(junk.test(hu.pathname)||bad.test(hu.hostname+hu.pathname+' '+(a.className||'')))continue;" +
-        "var poster=abs(img.currentSrc||img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy')||img.getAttribute('src')||'');" +
+        "var poster=abs((img&&(img.currentSrc||img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy')||img.getAttribute('src')||''))||(bgMatch&&bgMatch[1])||'');" +
         "if(!poster||bad.test(poster))continue;" +
-        "var w=img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0;" +
-        "var h=img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0;" +
+        "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(box.getBoundingClientRect().width||0);" +
+        "var h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(box.getBoundingClientRect().height||0);" +
         "if(w>0&&w<100)continue;if(h>0&&h<70)continue;" +
         "var ratio=(w>0&&h>0)?w/h:1.4;if(ratio>3.25||ratio<0.32)continue;" +
         "var card=a,cl='';" +
