@@ -127,11 +127,24 @@ public final class SiteScanActivity extends Activity {
         web=new WebView(this);
         // Keep the scanner close to its original working WebView configuration.
         // Only retain same-WebView handling so links such as Supjav More+ keep working.
-        web.getSettings().setJavaScriptEnabled(true);
-        web.getSettings().setDomStorageEnabled(true);
-        web.getSettings().setLoadsImagesAutomatically(true);
-        web.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
-        web.getSettings().setSupportMultipleWindows(false);
+        android.webkit.WebSettings scanSettings=web.getSettings();
+        scanSettings.setJavaScriptEnabled(true);
+        scanSettings.setDomStorageEnabled(true);
+        scanSettings.setDatabaseEnabled(true);
+        scanSettings.setLoadsImagesAutomatically(true);
+        scanSettings.setJavaScriptCanOpenWindowsAutomatically(true);
+        scanSettings.setMediaPlaybackRequiresUserGesture(false);
+        scanSettings.setSupportMultipleWindows(false); // Keep More+ navigation in this WebView.
+        scanSettings.setBuiltInZoomControls(true);
+        scanSettings.setDisplayZoomControls(false);
+        scanSettings.setUseWideViewPort(true);
+        scanSettings.setLoadWithOverviewMode(true);
+        if(android.os.Build.VERSION.SDK_INT>=21){
+            scanSettings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
+        }
+        // Match the normal browser page: some catalog sites reject the default Android WebView UA.
+        scanSettings.setUserAgentString(scanSettings.getUserAgentString().replace("; wv","").replace(" Version/4.0",""));
         web.setBackgroundColor(Color.BLACK);
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
@@ -151,7 +164,7 @@ public final class SiteScanActivity extends Activity {
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
                 resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";
                 lastAutoScanUrl="";
-                status.setText("Membuka "+url+" — katalog akan dipindai otomatis setelah halaman siap.");
+                status.setText("Membuka "+url+" — tunggu halaman tampil, lalu tekan Pindai sekarang.");
             }
             @Override public void onPageCommitVisible(WebView v,String url){
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
