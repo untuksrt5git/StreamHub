@@ -206,14 +206,26 @@ public final class SiteScanActivity extends Activity {
         for(int i=0;oldVideos!=null&&i<oldVideos.length();i++){
             JSONObject v=oldVideos.optJSONObject(i);if(v==null)continue;
             normalizeVideo(v);
-            String key=v.optString("pageUrl","")+"|"+v.optString("poster","");
+            String key=v.optString("pageUrl","");
+            if(key.isEmpty())key=v.optString("embedUrl","");
             if(seen.add(key))merged.put(v);
         }
         for(int i=0;i<videos.length();i++){
             JSONObject v=videos.optJSONObject(i);if(v==null)continue;
             normalizeVideo(v);
-            String key=v.optString("pageUrl","")+"|"+v.optString("poster","");
+            String key=v.optString("pageUrl","");
+            if(key.isEmpty())key=v.optString("embedUrl","");
             if(seen.add(key))merged.put(v);
+            else if(!key.isEmpty()&&!v.optString("poster","").isEmpty()){
+                for(int j=0;j<merged.length();j++){
+                    JSONObject existing=merged.optJSONObject(j);
+                    if(existing!=null&&key.equals(existing.optString("pageUrl",existing.optString("embedUrl","")))){
+                        if(existing.optString("poster","").isEmpty())existing.put("poster",v.optString("poster"));
+                        if(existing.optString("title","Video").equals("Video"))existing.put("title",v.optString("title","Video"));
+                        break;
+                    }
+                }
+            }
             String embed=v.optString("embedUrl","");
             if(!embed.isEmpty()&&!embeds.toString().contains(embed))embeds.put(embed);
         }
