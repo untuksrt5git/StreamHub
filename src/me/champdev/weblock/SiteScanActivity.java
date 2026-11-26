@@ -61,7 +61,7 @@ public final class SiteScanActivity extends Activity {
     private String lastResourceFailure="";
     private String lastAutoScanUrl="";
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);} };
+    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(autoCrawl&&!autoCurrentCategory.isEmpty())autoCategoryParserWarnings.add(autoCurrentCategory);if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);} };
 
     private final String script =
         "(function(){try{" +
@@ -603,6 +603,9 @@ public final class SiteScanActivity extends Activity {
         if(!isScanCurrent(generation))return;
         scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);
         status.setText(message);
+        // A failed page must invalidate this category's deep-scan completion,
+        // even if a later page happens to parse successfully.
+        if(autoCrawl&&!autoCurrentCategory.isEmpty())autoCategoryParserWarnings.add(autoCurrentCategory);
         if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);
     }
 
@@ -818,13 +821,26 @@ public final class SiteScanActivity extends Activity {
             // Roll back on every failure after moving the previous catalog,
             // including a failed validation after the new file was installed.
             if(oldMoved&&isValidCatalogFile(backup)){
-                if(target.exists()&&!target.delete()){
-                    failure.addSuppressed(new java.io.IOException("File katalog baru gagal dihapus saat rollback"));
-                }else if(!backup.renameTo(target)){
-                    failure.addSuppressed(new java.io.IOException("Backup katalog gagal dipulihkan ke lokasi utama"));
+                File rejected=null;
+                boolean targetCleared=!target.exists()||target.delete();
+                // If deletion is refused by the filesystem, move the failed
+                // candidate aside so the healthy backup can still be restored.
+                if(!targetCleared&&target.exists()){
+                    rejected=new File(dir,target.getName()+".failed."+android.os.Process.myPid()+"."+System.currentTimeMillis());
+                    targetCleared=target.renameTo(rejected);
+                }
+                if(targetCleared){
+                    if(backup.renameTo(target)){
+                        installed=false;
+                        if(rejected!=null&&rejected.exists())rejected.delete();
+                        try{syncDirectory(dir);}catch(Exception syncFailure){failure.addSuppressed(syncFailure);}
+                    }else{
+                        failure.addSuppressed(new java.io.IOException("Backup katalog gagal dipulihkan ke lokasi utama"));
+                        // Keep the failed candidate available if backup restore itself fails.
+                        if(rejected!=null&&rejected.exists()&&!target.exists())rejected.renameTo(target);
+                    }
                 }else{
-                    installed=false;
-                    try{syncDirectory(dir);}catch(Exception syncFailure){failure.addSuppressed(syncFailure);}
+                    failure.addSuppressed(new java.io.IOException("File katalog baru gagal dibersihkan atau dipindahkan saat rollback"));
                 }
             }else if(installed&&!isValidCatalogFile(target)){
                 if(!target.delete())failure.addSuppressed(new java.io.IOException("Katalog baru tidak valid dan gagal dibersihkan"));
