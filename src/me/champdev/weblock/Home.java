@@ -2849,10 +2849,25 @@ public class Home extends Activity {
         }
         focusable(card, dp(12));
         card.setOnClickListener(v -> {
-            String sourceName = Uri.parse(playUrl).getHost();
-            if (sourceName == null || sourceName.isEmpty()) sourceName = title;
-            // The player origin is the actual embed host, never the parent site that happened to list it.
-            startActivity(WebActivity.open(this, title, playUrl, playUrl));
+            // Website playback remains the default (UC-like WebView); the user can choose the source page
+            // or try the native player when the saved URL is a directly playable media URL.
+            new AlertDialog.Builder(this).setTitle(title)
+                .setItems(new String[]{"Putar di StreamHub (utama)", "Buka halaman video sumber", "Coba player native"},
+                    (dialog, choice) -> {
+                        if (choice == 0) {
+                            String sourceName = Uri.parse(playUrl).getHost();
+                            if (sourceName == null || sourceName.isEmpty()) sourceName = title;
+                            startActivity(WebActivity.open(this, title, playUrl, playUrl));
+                        } else if (choice == 1) {
+                            String target = pageUrl.matches("(?i)^https?://.+") ? pageUrl : playUrl;
+                            startActivity(WebActivity.open(this, title, target, target));
+                        } else {
+                            Map<String, String> headers = new HashMap<>();
+                            if (pageUrl.matches("(?i)^https?://.+")) headers.put("Referer", pageUrl);
+                            boolean dash = playUrl.toLowerCase(java.util.Locale.ROOT).contains(".mpd");
+                            startActivity(PlayerActivity.open(this, playUrl, dash, headers, new ArrayList<>(), title));
+                        }
+                    }).show();
         });
         return card;
     }
