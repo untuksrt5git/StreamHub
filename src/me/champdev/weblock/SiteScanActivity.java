@@ -34,7 +34,6 @@ public final class SiteScanActivity extends Activity {
     private int domNullRetries;
     private String lastResourceFailure="";
     private String lastAutoScanUrl="";
-    private static final int MAX_SCROLL_PASSES=32;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");} };
 
@@ -44,14 +43,14 @@ public final class SiteScanActivity extends Activity {
         "var junk=/(^|\\/)(category|categories|pornstars?|pornstar|stars?|actress|actors?|performers?|cast|models?|celebrities|sites|tags?|search|login|register|favorites|about|contact)(\\/|$)/i;" +
         "function abs(x){try{return x?new URL(String(x).trim(),location.href).href:'';}catch(e){return '';}}" +
         "function txt(n){return(n&&n.textContent?n.textContent:'').replace(/\\s+/g,' ').trim();}" +
-        "function goodTitle(t){t=(t||'').replace(/\\s+/g,' ').trim();return t.length>=5&&t.length<=180&&!/^(home|watch|play|video|videos|ads?|advertisement|next|previous|more|menu|login|register|body a site|a site|site body|body)$/i.test(t)&&!/^(body|html|document)\\b/i.test(t)&&!/(^|\\s)(body a site|this site|site body)(\\s|$)/i.test(t)&&!bad.test(t);}" +
+        "function goodTitle(t){t=(t||'').replace(/\\s+/g,' ').trim();return t.length>=2&&t.length<=180&&!/^(home|watch|play|video|videos|ads?|advertisement|next|previous|more|menu|login|register|body a site|a site|site body|body)$/i.test(t)&&!/^(body|html|document)\\b/i.test(t)&&!/(^|\\s)(body a site|this site|site body)(\\s|$)/i.test(t)&&!bad.test(t);}" +
         "function cardClass(n){var c=' '+String(n&&n.className||'')+' ';return /(^|[\\s_-])(post|video|movie|item|entry|thumb|thumbnail|film|clip|card|media)([\\s_-]|$)/i.test(c);}" +
         "function sameHost(a,b){a=(a||'').toLowerCase().replace(/^www\\./,'');b=(b||'').toLowerCase().replace(/^www\\./,'');return a===b||a.endsWith('.'+b)||b.endsWith('.'+a);}" +
         "function firstSrcset(v){if(!v)return '';var p=String(v).split(',')[0].trim();return p.split(/\\s+/)[0]||'';}" +
         "function imageUrl(im){if(!im)return '';var cur=abs(im.currentSrc||'');if(cur&&!bad.test(cur)&&!/^data:image\\/(gif|svg)/i.test(cur)&&(im.naturalWidth>0||im.complete))return cur;var src=abs(im.getAttribute('src')||'');if(src&&!bad.test(src)&&!/^data:image\\/(gif|svg)/i.test(src)&&(im.naturalWidth>0||im.complete))return src;var names=['data-src','data-lazy-src','data-original','data-original-src','data-lazy','data-thumb','data-thumbnail','data-poster','data-image','data-url','data-bg','data-background','data-srcset','data-lazy-srcset','srcset','src'];for(var k=0;k<names.length;k++){var v=im.getAttribute(names[k]);if(v){if(names[k].indexOf('srcset')>=0)v=firstSrcset(v);var u=abs(v);if(u&&!bad.test(u)&&!/^data:image\\/(gif|svg)/i.test(u))return u;}}return cur&&!bad.test(cur)&&!/^data:image\\/(gif|svg)/i.test(cur)?cur:'';}" +
         "function bgUrl(el){if(!el)return '';var vals=[el.getAttribute('data-bg'),el.getAttribute('data-background'),el.getAttribute('data-original'),el.getAttribute('data-src'),el.getAttribute('data-lazy-src'),el.getAttribute('data-poster'),el.getAttribute('data-thumb'),el.getAttribute('style')];try{vals.push(getComputedStyle(el).backgroundImage);}catch(e){}for(var q=0;q<vals.length;q++){var v=vals[q]||'',m=v.match(/url\\((.*?)\\)/i);if(m)v=m[1].replace(/^['\"]|['\"]$/g,'');var u=abs(v);if(!u&&/^(https?:)?\\/\\//i.test(v))u=abs(v);if(u&&!bad.test(u)&&!/^data:image\\/(gif|svg)/i.test(u))return u;}return '';}" +
         "var out=[],seen={},anchors=document.querySelectorAll('a[href]'),isSupjav=/supjav\\.com$/i.test(location.hostname),checked=0,cardCandidates=0;" +
-        "for(var i=0;i<anchors.length&&out.length<240;i++){" +
+        "for(var i=0;i<anchors.length;i++){" +
         "var a=anchors[i],href=abs(a.getAttribute('href'));checked++;if(!href)continue;" +
         "var hu;try{hu=new URL(href);}catch(e){continue;}if(!/^https?:$/.test(hu.protocol)||!sameHost(hu.hostname,location.hostname)||href.split('#')[0]===location.href.split('#')[0])continue;" +
         "if(junk.test(hu.pathname)||bad.test(hu.hostname+hu.pathname+' '+(a.className||'')))continue;" +
@@ -72,7 +71,7 @@ public final class SiteScanActivity extends Activity {
         "if(!isSupjav&&w>0&&w<60)continue;if(!isSupjav&&h>0&&h<45)continue;" +
         "var heading=card.querySelector('h1,h2,h3,h4,.title,.name,[class*=title],[itemprop=name]'),titles=[a.getAttribute('title'),a.getAttribute('data-title'),a.getAttribute('aria-label'),img&&img.getAttribute('alt'),heading&&txt(heading),txt(a),txt(card)],title='';" +
         "for(var ti=0;ti<titles.length;ti++){if(goodTitle(titles[ti])){title=String(titles[ti]).replace(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b/g,'').replace(/\\s+/g,' ').trim();if(goodTitle(title))break;title='';}}" +
-        "if(!title)continue;var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
+        "if(!title){var parts=hu.pathname.split('/').filter(Boolean),slug=parts.length?parts[parts.length-1]:'';try{slug=decodeURIComponent(slug);}catch(e){}slug=slug.replace(/\\.(html?|php|aspx?)$/i,'').replace(/[-_]+/g,' ').replace(/\\s+/g,' ').trim();title=goodTitle(slug)?slug:('Video '+(out.length+1));}var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
         "var key=href.split('#')[0];if(seen[key])continue;seen[key]=1;" +
         "var frame=card.querySelector('iframe[src]'),embed=frame?abs(frame.getAttribute('src')):href,host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
         "out.push({title:title,poster:poster||'',posterReferer:location.href,pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
@@ -300,14 +299,12 @@ public final class SiteScanActivity extends Activity {
                 if(atBottom){if(height==scanLastHeight)scanStableBottom++;else scanStableBottom=1;}
                 else scanStableBottom=0;
                 scanLastHeight=height;
-                if(scanPasses==1||scanPasses%4==0)status.setText("Memuat bertahap… langkah "+scanPasses+"/"+MAX_SCROLL_PASSES+
+                if(scanPasses==1||scanPasses%4==0)status.setText("Memuat bertahap… langkah "+scanPasses+" langkah" +
                     " • "+p.optInt("links",0)+" tautan • "+p.optInt("images",0)+" elemen gambar");
                 boolean stable=atBottom&&scanStableBottom>=3;
-                boolean hitLimit=scanPasses>=MAX_SCROLL_PASSES&&!stable;
-                if(stable||hitLimit){
-                    final boolean limited=hitLimit;
-                    status.setText("Pemuatan bertahap selesai. Menunggu gambar dan mengumpulkan tautan…");
-                    activateLazyImages(generation,manual,limited);
+                if(stable){
+                    status.setText("Pemuatan bertahap selesai setelah "+scanPasses+" langkah. Menunggu gambar dan mengumpulkan tautan…");
+                    activateLazyImages(generation,manual,false);
                 }else{
                     handler.postDelayed(()->scanScrollStep(generation,manual),650);
                 }
