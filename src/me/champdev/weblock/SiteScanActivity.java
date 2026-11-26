@@ -699,10 +699,20 @@ public final class SiteScanActivity extends Activity {
     private void save(JSONObject result,JSONArray videos)throws Exception{
         File f=new File(getFilesDir(),indexFile);
         JSONObject root=new JSONObject();
-        try{root=new JSONObject(Sources.read(f));}catch(Exception ignored){}
+        boolean loadedCatalog=false;
+        if(isValidCatalogFile(f)){
+            try{root=new JSONObject(Sources.read(f));loadedCatalog=true;}catch(Exception ignored){}
+        }
+        // If the active file is damaged, merge from the known-good backup instead
+        // of starting with an empty catalog and then refusing the replacement.
+        File knownBackup=new File(f.getParentFile(),f.getName()+".bak");
+        if(!loadedCatalog&&isValidCatalogFile(knownBackup)){
+            try{root=new JSONObject(Sources.read(knownBackup));loadedCatalog=true;}
+            catch(Exception ignored){}
+        }
         // Older builds keyed the JS index by the redirected/current URL. Recover those
         // entries once when the stable website index is still empty.
-        if(root.optJSONArray("videos")==null || root.optJSONArray("videos").length()==0){
+        if(!loadedCatalog&&(root.optJSONArray("videos")==null || root.optJSONArray("videos").length()==0)){
             File legacy=new File(getFilesDir(),WebsiteIndexer.fileName(CustomSites.id(siteUrl)));
             if(!legacy.equals(f) && legacy.exists()){
                 try{JSONObject previous=new JSONObject(Sources.read(legacy));
@@ -804,9 +814,8 @@ public final class SiteScanActivity extends Activity {
             // Never discard the only known-good backup to make room for a backup
             // of an unvalidated target.
             if(target.exists()&&!isValidCatalogFile(target)){
-                if(isValidCatalogFile(backup))throw new java.io.IOException("Katalog aktif rusak; backup sehat dipertahankan untuk pemulihan");
-                // Preserve the unreadable/legacy file under a separate name, then allow
-                // the newly validated catalog to take its place. Never delete old bytes.
+                // Preserve the unreadable file. A healthy backup, if present, is kept
+                // untouched and has already been used as the merge source by save().
                 quarantined=new File(dir,target.getName()+".corrupt."+android.os.Process.myPid()+"."+System.currentTimeMillis());
                 if(!target.renameTo(quarantined))throw new java.io.IOException("Katalog lama tidak valid dan gagal diamankan sebagai file pemulihan");
                 syncDirectory(dir);
@@ -827,7 +836,12 @@ public final class SiteScanActivity extends Activity {
             // including a failed validation after the new file was installed.
             if(quarantined!=null&&quarantined.exists()){
                 boolean targetCleared=!target.exists()||target.delete();
-                if(targetCleared){
+                if(targetCleared&&isValidCatalogFile(backup)){
+                    // Prefer restoring the known-good backup; keep the corrupt file quarantined.
+                    if(!backup.renameTo(target))
+                        failure.addSuppressed(new java.io.IOException("Backup katalog sehat gagal dipulihkan; file rusak tetap aman di "+quarantined.getName()));
+                    else try{syncDirectory(dir);}catch(Exception syncFailure){failure.addSuppressed(syncFailure);}
+                }else if(targetCleared){
                     if(!quarantined.renameTo(target))
                         failure.addSuppressed(new java.io.IOException("File katalog lama yang diamankan gagal dipulihkan"));
                     else try{syncDirectory(dir);}catch(Exception syncFailure){failure.addSuppressed(syncFailure);}
