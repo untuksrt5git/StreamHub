@@ -1,6 +1,8 @@
 package me.champdev.weblock;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,6 +20,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -34,6 +39,8 @@ public final class SiteScanActivity extends Activity {
     private boolean finished, scanning, autoCrawl, periodicEnabled;
     private int autoGeneration=0;
     private static final long PERIODIC_SCAN_MS=30L*60L*1000L;
+    private static final int REQUEST_EXPORT_ROUTINE=7311, REQUEST_IMPORT_ROUTINE=7312;
+    private JSONArray discoveredCategories=new JSONArray();
     private final ArrayList<String> autoQueue=new ArrayList<>();
     private final LinkedHashSet<String> autoQueued=new LinkedHashSet<>();
     private final LinkedHashSet<String> autoVisited=new LinkedHashSet<>();
@@ -132,6 +139,9 @@ public final class SiteScanActivity extends Activity {
         autoButton.setText("Mulai scan rutin (30 mnt)");
         autoButton.setOnClickListener(v->startAutoCrawl());
         bar.addView(autoButton,new LinearLayout.LayoutParams(0,-2,1));
+        Button categoryButton=new Button(this); categoryButton.setText("Kategori rutin"); categoryButton.setOnClickListener(v->discoverCategoriesAndChoose()); bar.addView(categoryButton,new LinearLayout.LayoutParams(0,-2,1));
+        Button exportButton=new Button(this); exportButton.setText("Ekspor"); exportButton.setOnClickListener(v->exportRoutineConfig()); bar.addView(exportButton,new LinearLayout.LayoutParams(-2,-2));
+        Button importButton=new Button(this); importButton.setText("Impor"); importButton.setOnClickListener(v->importRoutineConfig()); bar.addView(importButton,new LinearLayout.LayoutParams(-2,-2));
         Button scanButton=new Button(this);
         scanButton.setText("Pindai halaman");
         scanButton.setOnClickListener(v->scan(true));
@@ -482,10 +492,8 @@ public final class SiteScanActivity extends Activity {
     /** Start a same-site crawl of category and pagination links exposed by the current page. */
     private void startAutoCrawl(){
         if(finished||web==null||scanning||autoCrawl){if(status!=null&&scanning)status.setText("Pemindaian halaman sedang berlangsung. Tunggu selesai atau tekan Stop sebelum memulai ulang.");return;}
-        periodicEnabled=true;
-        handler.removeCallbacks(periodicScan);
-        beginAutoCrawl();
-        handler.postDelayed(periodicScan,PERIODIC_SCAN_MS);
+        if(loadSelectedCategories().length()==0){discoverCategoriesAndChoose();return;}
+        periodicEnabled=true;handler.removeCallbacks(periodicScan);beginAutoCrawl();handler.postDelayed(periodicScan,PERIODIC_SCAN_MS);
     }
 
     private void beginAutoCrawl(){
@@ -507,14 +515,62 @@ public final class SiteScanActivity extends Activity {
             initialUrl=siteRootUrl;
         }
         if(initialUrl==null||initialUrl.trim().isEmpty())initialUrl=siteRootUrl;
-        enqueueAuto(initialUrl,autoKey(siteRootUrl));
-        if(autoQueue.isEmpty()){
-            autoCrawl=false;
-            status.setText("Scraping OMG tidak dimulai: URL halaman utama ditolak. Periksa alamat sumber website, lalu muat ulang halaman dan coba lagi. URL: "+String.valueOf(initialUrl));
-            return;
-        }
+        JSONArray chosen=loadSelectedCategories();
+        for(int i=0;i<chosen.length();i++){JSONObject c=chosen.optJSONObject(i);if(c!=null)enqueueAuto(c.optString("url",""),c.optString("url",""));}
+        if(autoQueue.isEmpty()){autoCrawl=false;status.setText("Tidak ada kategori pilihan yang valid untuk situs ini. Buka Kategori rutin dan pilih ulang.");return;}
         autoNextPage();
     }
+
+
+    private android.content.SharedPreferences routinePrefs(){return getSharedPreferences("routine_scan_"+(siteId==null?"site":siteId),MODE_PRIVATE);}
+    private JSONArray loadSelectedCategories(){try{return new JSONArray(routinePrefs().getString("selected_categories","[]"));}catch(Exception e){return new JSONArray();}}
+    private void saveSelectedCategories(JSONArray categories){routinePrefs().edit().putString("selected_categories",categories.toString()).apply();}
+
+    private void discoverCategoriesAndChoose(){
+        if(web==null||scanning||autoCrawl){toast("Tunggu pemindaian selesai sebelum mengatur kategori.");return;}
+        status.setText("Mencari daftar kategori dari menu dan navigasi halaman…");
+        String js="(function(){try{var out=[],seen={};var as=document.querySelectorAll('a[href]');"+
+            "function add(a){try{var u=new URL(a.href,location.href);if(!/^https?:$/.test(u.protocol)||u.hostname.replace(/^www\\./,'')!==location.hostname.replace(/^www\\./,'')||u.href.split('#')[0]===location.href.split('#')[0])return;var url=u.href.split('#')[0];if(seen[url])return;var t=(a.innerText||a.textContent||a.getAttribute('title')||'').replace(/\\s+/g,' ').trim();if(t.length<2||t.length>90||/^(home|beranda|next|previous|login|register|search|contact|about|menu|more)$/i.test(t))return;seen[url]=1;out.push({name:t,url:url});}catch(e){}}"+
+            "for(var i=0;i<as.length;i++){var a=as[i],p='',c=((a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(a.parentElement&&a.parentElement.parentElement&&a.parentElement.parentElement.className||'')).toLowerCase(),t=(a.innerText||a.textContent||'').trim();try{p=new URL(a.href,location.href).pathname.toLowerCase();}catch(e){}"+
+            "var nav=!!(a.closest&&a.closest('nav,header,.menu,.navigation,.navbar,.sidebar,.widget_categories,.cat-list,.category-list,.genres,.tags'));var path=/(^|\\/)(category|categories|tag|tags|genre|genres|archive)(\\/|$)/.test(p);var cls=/(category|categories|cat-item|cat-list|genre|genres|tag-list|menu-item)/i.test(c);if((nav||path||cls)&&t.length>1)add(a);}return JSON.stringify(out);}catch(e){return '[]';}})()";
+        web.evaluateJavascript(js,value->{try{Object p=new org.json.JSONTokener(value==null?"[]":value).nextValue();if(p instanceof String)p=new org.json.JSONTokener((String)p).nextValue();discoveredCategories=p instanceof JSONArray?(JSONArray)p:new JSONArray();showCategoryChooser();}catch(Exception e){status.setText("Gagal membaca kategori: "+e.getMessage());}});
+    }
+
+    private void showCategoryChooser(){
+        if(discoveredCategories.length()==0){status.setText("Tidak ditemukan tautan kategori pada menu halaman ini. Buka halaman utama, tunggu menu tampil, lalu coba lagi.");return;}
+        JSONArray saved=loadSelectedCategories();java.util.HashSet<String> selected=new java.util.HashSet<>();
+        for(int i=0;i<saved.length();i++){JSONObject o=saved.optJSONObject(i);if(o!=null)selected.add(autoKey(o.optString("url","")));}
+        String[] labels=new String[discoveredCategories.length()];boolean[] checks=new boolean[labels.length];
+        for(int i=0;i<labels.length;i++){JSONObject o=discoveredCategories.optJSONObject(i);labels[i]=o==null?"Kategori":o.optString("name","Kategori");checks[i]=o!=null&&selected.contains(autoKey(o.optString("url","")));}
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Pilih kategori scan rutin").setMultiChoiceItems(labels,checks,(d,w,v)->checks[w]=v)
+            .setPositiveButton("Simpan pilihan",(d,w)->{JSONArray chosen=new JSONArray();for(int i=0;i<checks.length;i++)if(checks[i])chosen.put(discoveredCategories.optJSONObject(i));saveSelectedCategories(chosen);status.setText(chosen.length()+" kategori disimpan untuk scan rutin setiap 30 menit.");toast(chosen.length()+" kategori disimpan");})
+            .setNegativeButton("Batal",null).create();dialog.show();
+    }
+
+    private String exportPayload="";
+    private void exportRoutineConfig(){
+        try{JSONObject root=new JSONObject().put("format","StreamHubRoutineCategories").put("version",1).put("siteId",siteId).put("siteRootUrl",siteRootUrl).put("intervalMinutes",30).put("maxPagesPerCategory",AUTO_MAX_PAGES_PER_CATEGORY).put("categories",loadSelectedCategories());exportPayload=root.toString(2);
+            Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/json");i.putExtra(Intent.EXTRA_TITLE,"streamhub-kategori.json");startActivityForResult(i,REQUEST_EXPORT_ROUTINE);
+        }catch(Exception e){toast("Gagal menyiapkan ekspor: "+e.getMessage());}
+    }
+    private void importRoutineConfig(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");startActivityForResult(i,REQUEST_IMPORT_ROUTINE);}
+
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;
+        try{
+            if(requestCode==REQUEST_EXPORT_ROUTINE){try(OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException("File tujuan tidak dapat dibuka");out.write(exportPayload.getBytes(StandardCharsets.UTF_8));out.flush();}toast("Konfigurasi kategori berhasil diekspor.");}
+            else if(requestCode==REQUEST_IMPORT_ROUTINE){
+                StringBuilder raw=new StringBuilder();try(InputStream in=getContentResolver().openInputStream(data.getData())){if(in==null)throw new java.io.IOException("File tidak dapat dibuka");byte[] buf=new byte[4096];for(int n;(n=in.read(buf))>0;){if(raw.length()+n>1024*1024)throw new java.io.IOException("File konfigurasi terlalu besar");raw.append(new String(buf,0,n,StandardCharsets.UTF_8));}}
+                JSONObject root=new JSONObject(raw.toString());if(!"StreamHubRoutineCategories".equals(root.optString("format")))throw new IllegalArgumentException("Format file bukan konfigurasi kategori StreamHub");
+                if(!sameSiteHost(root.optString("siteRootUrl",""),siteRootUrl))throw new IllegalArgumentException("Konfigurasi berasal dari situs berbeda");
+                JSONArray incoming=root.optJSONArray("categories");if(incoming==null)throw new IllegalArgumentException("Daftar kategori tidak ditemukan");
+                JSONArray valid=new JSONArray();java.util.HashSet<String> seen=new java.util.HashSet<>();
+                for(int n=0;n<incoming.length();n++){JSONObject o=incoming.optJSONObject(n);if(o==null)continue;String u=o.optString("url",""),name=o.optString("name","Kategori");if(!sameSiteHost(u,siteRootUrl)||!u.matches("(?i)^https?://.*"))continue;String key=autoKey(u);if(!key.isEmpty()&&seen.add(key))valid.put(new JSONObject().put("name",name).put("url",u));}
+                if(valid.length()==0)throw new IllegalArgumentException("Tidak ada kategori valid untuk situs ini");saveSelectedCategories(valid);toast(valid.length()+" kategori berhasil diimpor.");status.setText(valid.length()+" kategori impor tersimpan.");
+            }
+        }catch(Exception e){toast("Impor/ekspor gagal: "+e.getMessage());}
+    }
+    private boolean sameSiteHost(String a,String b){String x=SiteAdapters.host(a),y=SiteAdapters.host(b);return !x.isEmpty()&&!y.isEmpty()&&(x.equals(y)||x.endsWith("."+y)||y.endsWith("."+x));}
 
     private String autoKey(String address){
         if(address==null)return "";
@@ -611,8 +667,7 @@ public final class SiteScanActivity extends Activity {
                 for(int i=0;i<links.length();i++){
                     JSONObject link=links.optJSONObject(i);if(link==null)continue;
                     String linkUrl=link.optString("url",""),kind=link.optString("kind","");
-                    if("category".equals(kind))enqueueAuto(linkUrl,linkUrl);
-                    else enqueueAuto(linkUrl,autoCurrentCategory);
+                    if("page".equals(kind))enqueueAuto(linkUrl,autoCurrentCategory);
                 }
                 autoCompleted++;
                 status.setText("Halaman "+autoCompleted+" selesai • "+links.length()+" tautan kategori/pagination diperiksa • "+(autoQueue.size()-before)+" halaman baru masuk antrean • "+autoQueue.size()+" menunggu.");
