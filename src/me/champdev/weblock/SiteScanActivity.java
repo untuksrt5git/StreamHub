@@ -33,6 +33,7 @@ public final class SiteScanActivity extends Activity {
     private int resourceHttpErrors, resourceNetworkErrors;
     private int domNullRetries;
     private String lastResourceFailure="";
+    private String lastAutoScanUrl="";
     private static final int MAX_SCROLL_PASSES=32;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");} };
@@ -149,19 +150,25 @@ public final class SiteScanActivity extends Activity {
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
                 resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";
-                status.setText("Membuka "+url+" — tunggu konten tampil, lalu tekan Pindai sekarang.");
+                lastAutoScanUrl="";
+                status.setText("Membuka "+url+" — katalog akan dipindai otomatis setelah halaman siap.");
             }
             @Override public void onPageCommitVisible(WebView v,String url){
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
             }
             @Override public void onPageFinished(WebView v,String url){
-                status.setText("Halaman selesai dimuat: "+url+" — halaman siap digunakan.");
+                status.setText("Halaman selesai dimuat: "+url+" — menyiapkan pemindaian katalog otomatis…");
                 v.evaluateJavascript("(function(){var b=document.body;return JSON.stringify({ready:document.readyState,title:document.title,host:location.hostname,bodyText:b?(b.innerText||'').trim().length:0,html:b?b.innerHTML.length:0,frames:document.querySelectorAll('iframe').length,scripts:document.scripts.length});})()",diag->{
                     if(finished)return;
-                    try{
-                        String d=diag==null?"":diag;
-                        status.setText("Pemeriksaan Supjav: "+d+" — poster tertunda sedang dimuat jika tersedia.");
-                    }catch(Exception ignored){}
+                    if(diag!=null) android.util.Log.d("StreamHubScan","Page ready "+diag);
+                    if(url==null||url.isEmpty()||url.equals(lastAutoScanUrl))return;
+                    lastAutoScanUrl=url;
+                    handler.postDelayed(()->{
+                        if(!finished&&web!=null&&!scanning&&url.equals(web.getUrl())){
+                            status.setText("Memindai katalog otomatis: "+url);
+                            scan(false);
+                        }
+                    },1400);
                 });
             }
             @Override public void onReceivedHttpError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceResponse response){
