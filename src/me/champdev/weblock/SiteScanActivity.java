@@ -32,6 +32,8 @@ public final class SiteScanActivity extends Activity {
     private SiteAdapters.Profile adapter;
     private boolean finished, scanning;
     private int scanGeneration, scanPasses, scanStableBottom, scanLastHeight=-1;
+    private int resourceHttpErrors, resourceNetworkErrors;
+    private String lastResourceFailure="";
     private static final int MAX_SCROLL_PASSES=24;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Halaman mungkin masih memuat konten atau menahan JavaScript. Coba lagi setelah halaman stabil.");} };
@@ -155,7 +157,8 @@ public final class SiteScanActivity extends Activity {
         });
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
-                status.setText("Membuka "+url+" — tombol Pindai sekarang tetap bisa digunakan tanpa menunggu halaman selesai.");
+                resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";
+                status.setText("Membuka "+url+" — tunggu konten tampil, lalu tekan Pindai sekarang.");
             }
             @Override public void onPageCommitVisible(WebView v,String url){
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
@@ -172,9 +175,11 @@ public final class SiteScanActivity extends Activity {
             }
             @Override public void onReceivedHttpError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceResponse response){
                 if(request.isForMainFrame())status.setText("Server menolak halaman ("+response.getStatusCode()+" "+response.getReasonPhrase()+"). Ini bukan kegagalan pemilih katalog.");
+                else{resourceHttpErrors++;lastResourceFailure=response.getStatusCode()+" "+request.getUrl().getHost();}
             }
             @Override public void onReceivedError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceError error){
                 if(request.isForMainFrame())status.setText("Halaman gagal dimuat: "+error.getDescription()+". Coba Stop, Muat ulang, atau pindah ke domain aktif.");
+                else{resourceNetworkErrors++;lastResourceFailure=String.valueOf(error.getDescription())+" @ "+request.getUrl().getHost();}
             }
         });
         root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
@@ -193,6 +198,7 @@ public final class SiteScanActivity extends Activity {
         scanning=true;
         final int generation=++scanGeneration;
         scanPasses=0;scanStableBottom=0;scanLastHeight=-1;
+        resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";
         handler.removeCallbacks(scanWatchdog);
         handler.postDelayed(scanWatchdog,45000);
         status.setText("Menyiapkan pemindaian "+adapter.name+" — memicu pemuatan gambar dan konten bertahap…");
@@ -226,18 +232,33 @@ public final class SiteScanActivity extends Activity {
                 scanLastHeight=height;
                 if(scanPasses==1||scanPasses%4==0)status.setText("Memuat bertahap… langkah "+scanPasses+"/"+MAX_SCROLL_PASSES+
                     " • "+p.optInt("links",0)+" tautan • "+p.optInt("images",0)+" elemen gambar");
-                boolean done=scanPasses>=MAX_SCROLL_PASSES||(atBottom&&scanStableBottom>=3);
-                if(done){
-                    final boolean limited=scanPasses>=MAX_SCROLL_PASSES&&!atBottom;
-                    status.setText("Pemuatan bertahap selesai. Mengumpulkan tautan dan poster…");
-                    web.evaluateJavascript("window.scrollTo(0,window.__shScanOriginalY||0);'restored';",ignored->{});
-                    handler.postDelayed(()->runDomScan(generation,manual,limited),450);
+                boolean stable=atBottom&&scanStableBottom>=3;
+                boolean hitLimit=scanPasses>=MAX_SCROLL_PASSES&&!stable;
+                if(stable||hitLimit){
+                    final boolean limited=hitLimit;
+                    status.setText("Pemuatan bertahap selesai. Menunggu gambar dan mengumpulkan tautan…");
+                    waitForImages(generation,manual,limited,0);
                 }else{
                     handler.postDelayed(()->scanScrollStep(generation,manual),650);
                 }
             }catch(Exception e){
                 finishScanError(generation,"Gagal memeriksa proses scroll: "+e.getMessage());
             }
+        });
+    }
+
+    private void waitForImages(int generation,boolean manual,boolean scrollLimited,int attempt){
+        if(!isScanCurrent(generation))return;
+        String state="(function(){var a=document.images||[],pending=0,loaded=0,failed=0;for(var i=0;i<a.length;i++){var x=a[i];if(x.naturalWidth>0)loaded++;else if(x.complete&&(x.currentSrc||x.src))failed++;else if(x.currentSrc||x.src)pending++;}return JSON.stringify({pending:pending,loaded:loaded,failed:failed,total:a.length});})()";
+        web.evaluateJavascript(state,value->{
+            if(!isScanCurrent(generation))return;
+            try{
+                JSONObject p=parseJsObject(value);int pending=p.optInt("pending",0);
+                if(pending>0&&attempt<5){
+                    status.setText("Menunggu gambar dimuat… "+p.optInt("loaded",0)+"/"+p.optInt("total",0)+" berhasil, "+pending+" masih berjalan");
+                    handler.postDelayed(()->waitForImages(generation,manual,scrollLimited,attempt+1),650);
+                }else runDomScan(generation,manual,scrollLimited);
+            }catch(Exception e){runDomScan(generation,manual,scrollLimited);}
         });
     }
 
@@ -251,13 +272,18 @@ public final class SiteScanActivity extends Activity {
                 JSONObject result=parseJsObject(value);
                 result.put("scrollPasses",scanPasses);
                 result.put("scrollLimitReached",scrollLimited);
+                result.put("resourceHttpErrors",resourceHttpErrors);
+                result.put("resourceNetworkErrors",resourceNetworkErrors);
+                result.put("lastResourceFailure",lastResourceFailure);
+                web.evaluateJavascript("window.scrollTo(0,window.__shScanOriginalY||0);'restored';",ignored->{});
                 JSONArray items=result.optJSONArray("items");
                 if(items==null)items=new JSONArray();
                 int posters=result.optInt("posters",0),missing=result.optInt("missingPosters",items.length()-posters);
                 String metrics="Tautan diperiksa "+result.optInt("anchorsChecked",0)+
                     " • gambar dimuat "+result.optInt("imagesLoaded",0)+"/"+result.optInt("imageElements",0)+
                     " • gagal "+result.optInt("imagesFailed",0)+" • poster "+posters+"/"+items.length()+
-                    " • tanpa poster "+missing+" • scroll "+scanPasses+(scrollLimited?" (batas tercapai)":"");
+                    " • tanpa poster "+missing+" • scroll "+scanPasses+(scrollLimited?" (batas tercapai)":"")+
+                    " • error resource HTTP "+resourceHttpErrors+", jaringan "+resourceNetworkErrors;
                 if(items.length()>0){
                     save(result,items);
                     status.setText("Ditemukan "+items.length()+" kartu video. Indeks disimpan.\n"+metrics+
@@ -269,6 +295,7 @@ public final class SiteScanActivity extends Activity {
                     status.setText("Belum ada kartu video yang cocok. "+metrics+
                         " • kandidat kartu "+result.optInt("cardsExamined",0)+
                         " • adapter "+result.optString("adapter","generic")+
+                        (lastResourceFailure.isEmpty()?"":" • resource terakhir gagal: "+lastResourceFailure)+
                         (msg.isEmpty()?"":" • "+msg));
                     if(manual)Toast.makeText(this,"Belum menemukan kartu katalog pada halaman ini",Toast.LENGTH_LONG).show();
                 }
@@ -350,7 +377,10 @@ public final class SiteScanActivity extends Activity {
                 .put("missingPosters",result.optInt("missingPosters",0)).put("imageElements",result.optInt("imageElements",0))
                 .put("imagesLoaded",result.optInt("imagesLoaded",0)).put("imagesFailed",result.optInt("imagesFailed",0))
                 .put("lazyImages",result.optInt("lazyImages",0)).put("scrollPasses",result.optInt("scrollPasses",0))
-                .put("scrollLimitReached",result.optBoolean("scrollLimitReached",false)))
+                .put("scrollLimitReached",result.optBoolean("scrollLimitReached",false))
+                .put("resourceHttpErrors",result.optInt("resourceHttpErrors",0))
+                .put("resourceNetworkErrors",result.optInt("resourceNetworkErrors",0))
+                .put("lastResourceFailure",result.optString("lastResourceFailure","")))
             .put("javascriptItems",merged.length())
             .put("limitations","Pemindaian DOM JavaScript pada halaman publik yang dibuka di WebView. Tidak melewati login, paywall, atau proteksi bot.");
         File tmp=new File(f.getParentFile(),f.getName()+".tmp");
