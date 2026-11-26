@@ -26,7 +26,7 @@ import java.io.FileOutputStream;
 public final class SiteScanActivity extends Activity {
     private WebView web;
     private TextView status;
-    private String siteUrl, siteName, siteId;
+    private String siteUrl, siteName, siteId, indexFile, siteRootUrl;
     private SiteAdapters.Profile adapter;
     private boolean finished, scanning;
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -82,8 +82,13 @@ public final class SiteScanActivity extends Activity {
         super.onCreate(b);
         siteUrl=getIntent().getStringExtra("url");
         siteName=getIntent().getStringExtra("name");
+        siteRootUrl=getIntent().getStringExtra("siteRootUrl");
+        if(siteRootUrl==null||siteRootUrl.isEmpty())siteRootUrl=siteUrl;
+        siteId=getIntent().getStringExtra("siteId");
+        if(siteId==null||siteId.isEmpty())siteId=CustomSites.id(siteRootUrl);
+        indexFile=getIntent().getStringExtra("indexFile");
+        if(indexFile==null||indexFile.isEmpty())indexFile=WebsiteIndexer.fileName(siteId);
         if(siteUrl==null||siteUrl.isEmpty()){finish();return;}
-        siteId=CustomSites.id(siteUrl);
         adapter=SiteAdapters.forUrl(siteUrl);
 
         LinearLayout root=new LinearLayout(this);
@@ -176,7 +181,7 @@ public final class SiteScanActivity extends Activity {
     }
 
     private void save(JSONObject result,JSONArray videos)throws Exception{
-        File f=new File(getFilesDir(),WebsiteIndexer.fileName(siteId));
+        File f=new File(getFilesDir(),indexFile);
         JSONObject root=new JSONObject();
         try{root=new JSONObject(Sources.read(f));}catch(Exception ignored){}
         JSONArray pages=root.optJSONArray("pages");if(pages==null)pages=new JSONArray();
@@ -208,7 +213,7 @@ public final class SiteScanActivity extends Activity {
         if(!pageExists)pages.put(new JSONObject().put("url",page).put("title",result.optString("title",siteName))
             .put("description","Katalog dipindai dari DOM JavaScript").put("poster","").put("kind","catalog")
             .put("indexedAt",System.currentTimeMillis()));
-        root.put("version",4).put("siteId",siteId).put("rootUrl",siteUrl)
+        root.put("version",4).put("siteId",siteId).put("rootUrl",siteRootUrl)
             .put("schema","streamhub.catalog.v1").put("adapterId",adapter.id)
             .put("adapterName",adapter.name).put("adapterVersion",SiteAdapters.VERSION)
             .put("canonicalHost",SiteAdapters.host(result.optString("page",siteUrl)))
