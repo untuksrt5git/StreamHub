@@ -57,9 +57,9 @@ public final class SiteScanActivity extends Activity {
         "if(junk.test(hu.pathname)||bad.test(hu.hostname+hu.pathname+' '+(a.className||'')))continue;" +
         "var candidate=null,fallback=null,cur=a;" +
         "for(var up=0;up<10&&cur&&cur.parentElement;up++){var p=cur.parentElement,tag=String(p.tagName||'').toLowerCase(),ac=p.querySelectorAll('a[href]').length,imc=p.querySelectorAll('img,source,[style],[data-bg],[data-original],[data-poster]').length,hasHead=!!p.querySelector('h1,h2,h3,h4,.title,.name,[class*=title],[itemprop=name]');" +
-        "if(ac<=8&&(imc>0||hasHead))fallback=p;" +
+        "if(!fallback&&ac<=8&&(imc>0||hasHead))fallback=p;" +
         "var strongCard=/(^|[\\s_-])(post|video|movie|item|entry|film|clip|card|media)([\\s_-]|$)/i.test(' '+String(p.className||'')+' ');" +
-        "if(tag==='article'||strongCard){candidate=p;if(hasHead&&imc>0)break;}else if(cardClass(p)&&!candidate)candidate=p;" +
+        "if(!candidate&&(tag==='article'||strongCard)){candidate=p;if(hasHead&&imc>0)break;}else if(!candidate&&cardClass(p))candidate=p;" +
         "cur=p;}" +
         "var card=candidate||fallback||a.parentElement||a;cardCandidates++;" +
         "var img=a.querySelector('img')||card.querySelector('img'),poster=imageUrl(img)||bgUrl(a)||bgUrl(card);" +
