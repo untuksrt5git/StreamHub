@@ -18,6 +18,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Locale;
 
 /**
  * JavaScript DOM scanner for public site catalogs.
@@ -28,7 +31,13 @@ public final class SiteScanActivity extends Activity {
     private TextView status;
     private String siteUrl, siteName, siteId, indexFile, siteRootUrl;
     private SiteAdapters.Profile adapter;
-    private boolean finished, scanning;
+    private boolean finished, scanning, autoCrawl;
+    private final ArrayList<String> autoQueue=new ArrayList<>();
+    private final LinkedHashSet<String> autoQueued=new LinkedHashSet<>();
+    private final LinkedHashSet<String> autoVisited=new LinkedHashSet<>();
+    private String autoCurrentUrl="";
+    private int autoCompleted=0, autoDiscovered=0;
+    private static final int AUTO_MAX_PAGES=120;
     private int scanGeneration, scanPasses, scanStableBottom, scanLastHeight=-1;
     private int resourceHttpErrors, resourceNetworkErrors;
     private int domNullRetries;
@@ -101,13 +110,17 @@ public final class SiteScanActivity extends Activity {
 
         LinearLayout bar=new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
+        Button autoButton=new Button(this);
+        autoButton.setText("Pindai otomatis semua");
+        autoButton.setOnClickListener(v->startAutoCrawl());
+        bar.addView(autoButton,new LinearLayout.LayoutParams(0,-2,1));
         Button scanButton=new Button(this);
-        scanButton.setText("Pindai sekarang");
+        scanButton.setText("Pindai halaman");
         scanButton.setOnClickListener(v->scan(true));
         bar.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
         Button stopButton=new Button(this);
         stopButton.setText("Stop");
-        stopButton.setOnClickListener(v->{if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Pemindaian dihentikan. Pemuatan halaman dan gambar tetap berjalan; tekan Pindai sekarang jika sudah siap.");}});
+        stopButton.setOnClickListener(v->{autoCrawl=false;autoQueue.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Pemindaian dihentikan. Hasil halaman yang sudah selesai tetap tersimpan.");}});
         bar.addView(stopButton,new LinearLayout.LayoutParams(-2,-2));
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
@@ -174,8 +187,14 @@ public final class SiteScanActivity extends Activity {
                 // Warm up lazy posters independently of the manual catalog scan.
                 // This only scrolls the current page to trigger its own lazy-image handlers,
                 // then restores the original position; it never extracts or saves catalog data.
-                startPosterWarmup(v);
-                status.setText("Halaman siap: "+url+" — poster dimuat bertahap. Tekan Pindai sekarang untuk menyimpan katalog.");
+                if(autoCrawl){
+                    autoCurrentUrl=url;
+                    status.setText("Crawler otomatis membuka halaman "+(autoCompleted+1)+" • "+url);
+                    handler.postDelayed(()->{if(autoCrawl&&!scanning&&web!=null&&url.equals(autoCurrentUrl))scan(false);},1100);
+                }else{
+                    startPosterWarmup(v);
+                    status.setText("Halaman siap: "+url+" — poster dimuat bertahap. Tekan Pindai halaman atau Pindai otomatis semua.");
+                }
                 v.evaluateJavascript("(function(){var b=document.body;return JSON.stringify({ready:document.readyState,title:document.title,host:location.hostname,bodyText:b?(b.innerText||'').trim().length:0,html:b?b.innerHTML.length:0,frames:document.querySelectorAll('iframe').length,scripts:document.scripts.length});})()",diag->{
                     if(!finished&&diag!=null) android.util.Log.d("StreamHubScan","Page ready "+diag);
                 });
@@ -418,9 +437,84 @@ public final class SiteScanActivity extends Activity {
                         (msg.isEmpty()?"":" • "+msg));
                     if(manual)Toast.makeText(this,"Belum menemukan kartu katalog pada halaman ini",Toast.LENGTH_LONG).show();
                 }
+                if(autoCrawl)discoverAndAdvanceAuto();
             }catch(Exception e){
                 status.setText("Gagal membaca hasil pemindaian: "+e.getMessage());
+                if(autoCrawl)discoverAndAdvanceAuto();
             }
+        });
+    }
+
+
+    /** Start a same-site crawl of category and pagination links exposed by the current page. */
+    private void startAutoCrawl(){
+        if(finished||web==null||scanning)return;
+        autoCrawl=true;autoQueue.clear();autoQueued.clear();autoVisited.clear();
+        autoCompleted=0;autoDiscovered=0;
+        enqueueAuto(siteUrl);
+        autoNextPage();
+    }
+
+    private String autoKey(String address){
+        if(address==null)return "";
+        String value=address.trim();
+        int hash=value.indexOf('#');if(hash>=0)value=value.substring(0,hash);
+        while(value.endsWith("/")&&value.length()>value.indexOf("://")+3)value=value.substring(0,value.length()-1);
+        return value;
+    }
+
+    private void enqueueAuto(String address){
+        String value=autoKey(address);
+        if(value.isEmpty()||autoQueued.contains(value)||autoVisited.contains(value)||autoQueue.size()+autoCompleted>=AUTO_MAX_PAGES)return;
+        try{
+            android.net.Uri u=android.net.Uri.parse(value);
+            if(!("http".equalsIgnoreCase(u.getScheme())||"https".equalsIgnoreCase(u.getScheme())))return;
+            String root=SiteAdapters.host(siteRootUrl),host=SiteAdapters.host(value);
+            if(root.isEmpty()||host.isEmpty()||!(host.equals(root)||host.endsWith("."+root)))return;
+            autoQueued.add(value);autoQueue.add(value);autoDiscovered++;
+        }catch(Exception ignored){}
+    }
+
+    private void autoNextPage(){
+        if(!autoCrawl||finished||web==null)return;
+        if(autoCompleted>=AUTO_MAX_PAGES||autoQueue.isEmpty()){
+            autoCrawl=false;
+            status.setText("Pemindaian otomatis selesai. "+autoCompleted+" halaman diproses, "+autoDiscovered+" URL ditemukan. Katalog sudah digabung dan duplikat dihapus."+
+                (autoCompleted>=AUTO_MAX_PAGES?" Batas aman "+AUTO_MAX_PAGES+" halaman tercapai; jalankan lagi untuk melanjutkan penelusuran.":""));
+            Toast.makeText(this,"Crawler selesai: "+autoCompleted+" halaman",Toast.LENGTH_LONG).show();
+            return;
+        }
+        String next=autoQueue.remove(0);
+        autoVisited.add(autoKey(next));
+        autoCurrentUrl=next;
+        status.setText("Membuka halaman "+(autoCompleted+1)+" • antrean "+autoQueue.size()+" • "+next);
+        web.loadUrl(next);
+    }
+
+    /**
+     * Only follow clear category/navigation and pagination links, never ordinary video-card
+     * links. The site's own JavaScript has already rendered the links in this WebView.
+     */
+    private void discoverAndAdvanceAuto(){
+        if(!autoCrawl||web==null)return;
+        final String js="(function(){try{var out=[],seen={};function add(a,kind){try{var u=new URL(a.href,location.href);if(!/^https?:$/.test(u.protocol)||u.hostname.replace(/^www\\./,'')!==location.hostname.replace(/^www\\./,'')||u.href.split('#')[0]===location.href.split('#')[0])return;var x=u.href.split('#')[0];if(!seen[x]){seen[x]=1;out.push({url:x,kind:kind});}}catch(e){}}"+
+            "var as=document.querySelectorAll('a[href]');for(var i=0;i<as.length;i++){var a=as[i],h=a.href||'',p='';try{p=new URL(h).pathname.toLowerCase();}catch(e){}var cls=((a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(a.parentElement&&a.parentElement.parentElement&&a.parentElement.parentElement.className||'')).toLowerCase(),txt=(a.innerText||a.textContent||'').trim().toLowerCase(),rel=(a.getAttribute('rel')||'').toLowerCase();"+
+            "var pag=rel.indexOf('next')>=0||/(^|[\\s_-])(next|prev|previous|page-numbers|pagination|nav-links|older|newer)([\\s_-]|$)/.test(cls)||/(^|\\/)page\\/\\d+(\\/|$)/.test(p)||/[?&](paged|page)=\\d+/i.test(h)||/^(next|older|newer|»|›|\\u203a|\\u00bb)$/.test(txt);"+
+            "var card=/(^|[\\s_-])(post|video|movie|item|entry|thumb|thumbnail|film|clip|card|media)([\\s_-]|$)/.test(cls)||!!(a.closest&&a.closest('article,.video,.movie,.post,.item,.entry,.thumb,.thumbnail,.card'));"+
+            "var cat=/(^|\\/)(category|categories|tag|tags|genre|genres|archive)(\\/|$)/.test(p)||(!card&&(/(^|[\\s_-])(category|categories|cat-list|cat-item|genre|genres|menu|navigation|nav-menu|sidebar)([\\s_-]|$)/.test(cls))&&txt.length>1&&txt.length<80);"+
+            "if(pag)add(a,'page');else if(cat)add(a,'category');}return JSON.stringify(out);}catch(e){return '[]';}})()";
+        web.evaluateJavascript(js,value->{
+            if(!autoCrawl)return;
+            try{
+                Object parsed=new org.json.JSONTokener(value==null?"[]":value).nextValue();
+                if(parsed instanceof String)parsed=new org.json.JSONTokener((String)parsed).nextValue();
+                JSONArray links=parsed instanceof JSONArray?(JSONArray)parsed:new JSONArray();
+                int before=autoQueue.size();
+                for(int i=0;i<links.length();i++){JSONObject link=links.optJSONObject(i);if(link!=null)enqueueAuto(link.optString("url",""));}
+                autoCompleted++;
+                status.setText("Halaman "+autoCompleted+" selesai • "+links.length()+" tautan kategori/pagination diperiksa • "+(autoQueue.size()-before)+" halaman baru masuk antrean • "+autoQueue.size()+" menunggu.");
+            }catch(Exception e){autoCompleted++;}
+            handler.postDelayed(this::autoNextPage,850);
         });
     }
 
@@ -560,7 +654,7 @@ public final class SiteScanActivity extends Activity {
     }
 
     @Override protected void onDestroy(){
-        finished=true;handler.removeCallbacksAndMessages(null);
+        finished=true;autoCrawl=false;autoQueue.clear();handler.removeCallbacksAndMessages(null);
         if(web!=null){web.stopLoading();web.loadUrl("about:blank");web.destroy();web=null;}
         super.onDestroy();
     }
