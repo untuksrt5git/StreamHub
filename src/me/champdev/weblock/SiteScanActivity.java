@@ -175,12 +175,17 @@ public final class SiteScanActivity extends Activity {
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
             }
             @Override public void onPageFinished(WebView v,String url){
-                status.setText("Halaman selesai dimuat: "+url+" — memeriksa isi halaman…");
+                status.setText("Halaman selesai dimuat: "+url+" — mengaktifkan poster tertunda…");
+                // Some catalog themes keep a transparent/low-res placeholder in src while
+                // the real poster is stored in data-src/data-original. Promote those URLs
+                // immediately so the scan page renders posters like the main browser.
+                handler.postDelayed(()->promotePageImages(v),500);
+                handler.postDelayed(()->promotePageImages(v),1800);
                 v.evaluateJavascript("(function(){var b=document.body;return JSON.stringify({ready:document.readyState,title:document.title,host:location.hostname,bodyText:b?(b.innerText||'').trim().length:0,html:b?b.innerHTML.length:0,frames:document.querySelectorAll('iframe').length,scripts:document.scripts.length});})()",diag->{
                     if(finished)return;
                     try{
                         String d=diag==null?"":diag;
-                        status.setText("Pemeriksaan Supjav: "+d+" — jika bodyText dan html 0, halaman tidak dikirim/ditampilkan oleh situs atau WebView.");
+                        status.setText("Pemeriksaan Supjav: "+d+" — poster tertunda sedang dimuat jika tersedia.");
                     }catch(Exception ignored){}
                 });
             }
@@ -196,6 +201,27 @@ public final class SiteScanActivity extends Activity {
         root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
         web.loadUrl(siteUrl);
+    }
+
+    private void promotePageImages(WebView target){
+        if(finished||target==null)return;
+        String js="(function(){try{var promoted=0,bgCount=0;"+
+            "function first(v){if(!v)return '';return String(v).split(',')[0].trim().split(/\\s+/)[0];}"+
+            "var nodes=document.querySelectorAll('img,source');"+
+            "for(var i=0;i<nodes.length;i++){var n=nodes[i];"+
+            "var attrs=['data-src','data-lazy-src','data-original-src','data-original','data-lazy','data-image','data-poster','data-thumb','data-url'];"+
+            "var real='';for(var a=0;a<attrs.length&&!real;a++){var val=n.getAttribute(attrs[a]);if(val&&!/^data:image\\/(gif|svg)/i.test(val))real=val;}"+
+            "var set=n.getAttribute('data-srcset')||n.getAttribute('data-lazy-srcset')||n.getAttribute('data-original-srcset');"+
+            "if(set){n.setAttribute('srcset',set);promoted++;}"+
+            "if(real&&n.tagName.toLowerCase()==='img'&&n.getAttribute('src')!==real){n.setAttribute('src',real);promoted++;}"+
+            "if(n.tagName.toLowerCase()==='img'){try{n.loading='eager';n.decoding='async';}catch(e){}}"+
+            "}"+
+            "var bg=document.querySelectorAll('[data-bg],[data-background],[data-background-image],[data-lazy-bg]');"+
+            "for(var j=0;j<bg.length;j++){var el=bg[j],u=el.getAttribute('data-bg')||el.getAttribute('data-background')||el.getAttribute('data-background-image')||el.getAttribute('data-lazy-bg');"+
+            "if(u){el.style.backgroundImage='url('+JSON.stringify(u).slice(1,-1)+')';bgCount++;}}"+
+            "return JSON.stringify({promoted:promoted,backgrounds:bgCount,images:document.images.length});"+
+            "}catch(e){return JSON.stringify({error:String(e)});}})()";
+        target.evaluateJavascript(js,null);
     }
 
     private JSONObject parseJsObject(String value)throws Exception{
