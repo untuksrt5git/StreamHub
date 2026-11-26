@@ -39,6 +39,11 @@ public final class SiteScanActivity extends Activity {
     private final LinkedHashSet<String> autoVisited=new LinkedHashSet<>();
     private final java.util.LinkedHashMap<String,Integer> autoCategoryPageCounts=new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String,String> autoPageCategories=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,Integer> autoPageNumbers=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,Integer> autoCategoryNewItems=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,Integer> autoCategoryStopAfterPage=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,Integer> autoParseRetries=new java.util.LinkedHashMap<>();
+    private int autoCurrentPage=1;
     private String autoCurrentUrl="", autoCurrentCategory="";
     private int autoCompleted=0, autoDiscovered=0;
     private static final int AUTO_MAX_PAGES=120;
@@ -435,18 +440,31 @@ public final class SiteScanActivity extends Activity {
                     " • tanpa poster "+missing+" • scroll "+scanPasses+(scrollLimited?" (batas tercapai)":"")+
                     " • error resource HTTP "+resourceHttpErrors+", jaringan "+resourceNetworkErrors;
                 if(items.length()>0){
+                    int newItemCount=autoCrawl?countNewItems(items):0;
                     save(result,items);
-                    status.setText("Ditemukan "+items.length()+" kartu video. Indeks disimpan.\n"+metrics+
-                        (missing>0?"\nTautan tanpa poster tetap disimpan.":"")+
-                        "\nAnda dapat membuka halaman lain dan memindai lagi.");
+                    if(autoCrawl)handleAutoPageResult(items.length(),newItemCount);
+                    status.setText("Ditemukan "+items.length()+" kartu video ("+(autoCrawl?newItemCount+" baru":"hasil halaman")+"). Indeks disimpan.\\n"+metrics+
+                        (missing>0?"\\nTautan tanpa poster tetap disimpan.":"")+
+                        "\\nAnda dapat membuka halaman lain dan memindai lagi.");
                     Toast.makeText(this,"Katalog: "+items.length()+" item ditemukan",Toast.LENGTH_LONG).show();
                 }else{
+                    if(autoCrawl){
+                        String pageKey=autoKey(autoCurrentUrl);
+                        int retries=autoParseRetries.containsKey(pageKey)?autoParseRetries.get(pageKey):0;
+                        if(retries<2){
+                            autoParseRetries.put(pageKey,retries+1);
+                            status.setText("Peringatan parser: 0 kartu terdeteksi. Mengulang halaman "+autoCurrentPage+" ("+(retries+1)+"/2), belum dianggap tidak ada konten baru…");
+                            handler.postDelayed(()->scan(false),1200);
+                            return;
+                        }
+                    }
                     String msg=result.optString("error","");
                     status.setText("Belum ada kartu video yang cocok. "+metrics+
                         " • kandidat kartu "+result.optInt("cardsExamined",0)+
                         " • adapter "+result.optString("adapter","generic")+
                         (lastResourceFailure.isEmpty()?"":" • resource terakhir gagal: "+lastResourceFailure)+
-                        (msg.isEmpty()?"":" • "+msg));
+                        (msg.isEmpty()?"":" • "+msg)+
+                        (autoCrawl?"\\nPeringatan parser dicatat; status deep scan tidak diubah.":""));
                     if(manual)Toast.makeText(this,"Belum menemukan kartu katalog pada halaman ini",Toast.LENGTH_LONG).show();
                 }
                 if(autoCrawl)discoverAndAdvanceAuto();
@@ -471,7 +489,8 @@ public final class SiteScanActivity extends Activity {
         if(finished||web==null||scanning||autoCrawl)return;
         autoGeneration++;
         autoCrawl=true;autoQueue.clear();autoQueued.clear();autoVisited.clear();
-        autoCategoryPageCounts.clear();autoPageCategories.clear();
+        autoCategoryPageCounts.clear();autoPageCategories.clear();autoPageNumbers.clear();
+        autoCategoryNewItems.clear();autoCategoryStopAfterPage.clear();autoParseRetries.clear();
         autoCompleted=0;autoDiscovered=0;
         enqueueAuto(siteUrl,autoKey(siteRootUrl));
         autoNextPage();
@@ -515,9 +534,12 @@ public final class SiteScanActivity extends Activity {
             String root=SiteAdapters.host(siteRootUrl),host=SiteAdapters.host(value);
             if(root.isEmpty()||host.isEmpty()||!(host.equals(root)||host.endsWith("."+root)))return;
             int count=autoCategoryPageCounts.containsKey(category)?autoCategoryPageCounts.get(category):0;
-            if(count>=AUTO_MAX_PAGES_PER_CATEGORY)return;
-            autoCategoryPageCounts.put(category,count+1);
+            int pageNumber=count+1;
+            Integer stopAfter=autoCategoryStopAfterPage.get(category);
+            if(count>=AUTO_MAX_PAGES_PER_CATEGORY||(stopAfter!=null&&pageNumber>stopAfter))return;
+            autoCategoryPageCounts.put(category,pageNumber);
             autoPageCategories.put(value,category);
+            autoPageNumbers.put(value,pageNumber);
             autoQueued.add(value);autoQueue.add(value);autoDiscovered++;
         }catch(Exception ignored){}
     }
@@ -535,6 +557,7 @@ public final class SiteScanActivity extends Activity {
         autoVisited.add(autoKey(next));
         autoCurrentUrl=next;
         autoCurrentCategory=autoPageCategories.containsKey(autoKey(next))?autoPageCategories.get(autoKey(next)):autoKey(siteRootUrl);
+        autoCurrentPage=autoPageNumbers.containsKey(autoKey(next))?autoPageNumbers.get(autoKey(next)):1;
         status.setText("Membuka halaman "+(autoCompleted+1)+" • antrean "+autoQueue.size()+" • "+next);
         web.loadUrl(next);
     }
@@ -577,6 +600,87 @@ public final class SiteScanActivity extends Activity {
         scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);
         status.setText(message);
         if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);
+    }
+
+    /** Count unique normalized URLs against the catalog snapshot before this page is upserted. */
+    private int countNewItems(JSONArray videos){
+        java.util.HashSet<String> known=new java.util.HashSet<>();
+        java.util.HashSet<String> page=new java.util.HashSet<>();
+        try{
+            File file=new File(getFilesDir(),indexFile);
+            JSONObject root=new JSONObject(Sources.read(file));
+            JSONArray old=root.optJSONArray("videos");
+            for(int i=0;old!=null&&i<old.length();i++){
+                JSONObject item=old.optJSONObject(i);
+                if(item!=null){String key=videoIdentity(item);if(!key.isEmpty())known.add(key);}
+            }
+        }catch(Exception ignored){}
+        int count=0;
+        for(int i=0;i<videos.length();i++){
+            JSONObject item=videos.optJSONObject(i);if(item==null)continue;
+            String key=videoIdentity(item);
+            if(!key.isEmpty()&&page.add(key)&&!known.contains(key))count++;
+        }
+        return count;
+    }
+
+    private boolean hasCompletedDeepScan(String category){
+        try{
+            JSONObject root=new JSONObject(Sources.read(new File(getFilesDir(),indexFile)));
+            JSONArray done=root.optJSONArray("deepScanCompleted");
+            for(int i=0;done!=null&&i<done.length();i++)if(category.equals(done.optString(i,"")))return true;
+        }catch(Exception ignored){}
+        return false;
+    }
+
+    /** Called only after the page catalog has been atomically saved successfully. */
+    private void markDeepScanCompleted(String category)throws Exception{
+        File file=new File(getFilesDir(),indexFile);
+        JSONObject root=new JSONObject(Sources.read(file));
+        JSONArray done=root.optJSONArray("deepScanCompleted");
+        if(done==null)done=new JSONArray();
+        for(int i=0;i<done.length();i++)if(category.equals(done.optString(i,"")))return;
+        done.put(category);
+        root.put("deepScanCompleted",done).put("deepScanUpdatedAt",System.currentTimeMillis());
+        replaceCatalogAtomically(file,root);
+    }
+
+    private void stopCategoryAfterPage(String category,int pageNumber){
+        autoCategoryStopAfterPage.put(category,pageNumber);
+        for(int i=autoQueue.size()-1;i>=0;i--){
+            String queued=autoQueue.get(i);
+            if(category.equals(autoPageCategories.get(queued))
+                && autoPageNumbers.containsKey(queued)
+                && autoPageNumbers.get(queued)>pageNumber)autoQueue.remove(i);
+        }
+    }
+
+    /** Apply incremental page 1–5 rules without changing the site's DOM/poster extraction. */
+    private void handleAutoPageResult(int totalParsedCount,int newItemCount){
+        if(!autoCrawl||totalParsedCount<=0)return;
+        String category=autoCurrentCategory;
+        int page=autoCurrentPage;
+        autoParseRetries.remove(autoKey(autoCurrentUrl));
+        if(page<=2){
+            int accumulated=autoCategoryNewItems.containsKey(category)?autoCategoryNewItems.get(category):0;
+            autoCategoryNewItems.put(category,accumulated+newItemCount);
+            if(page==2&&autoCategoryNewItems.get(category)==0&&hasCompletedDeepScan(category)){
+                stopCategoryAfterPage(category,2);
+                status.setText("Kategori sudah dikenal: halaman 1–2 tidak memiliki item baru. Halaman 3–5 dilewati berdasarkan deep scan sebelumnya.");
+                return;
+            }
+        }
+        if(page>=3&&(newItemCount==0||page>=AUTO_MAX_PAGES_PER_CATEGORY)){
+            stopCategoryAfterPage(category,page);
+            try{
+                // This marker is written only after save(result, items) completed atomically.
+                markDeepScanCompleted(category);
+                status.setText("Deep scan kategori selesai pada halaman "+page+"; status tersimpan setelah katalog berhasil disimpan.");
+            }catch(Exception e){
+                android.util.Log.e("StreamHubScan","Could not persist deep-scan marker",e);
+                status.setText("Katalog tersimpan, tetapi penanda deep scan gagal disimpan: "+e.getMessage());
+            }
+        }
     }
 
     private void save(JSONObject result,JSONArray videos)throws Exception{
