@@ -31,58 +31,49 @@ public final class SiteScanActivity extends Activity {
     private String siteUrl, siteName, siteId, indexFile, siteRootUrl;
     private SiteAdapters.Profile adapter;
     private boolean finished, scanning;
+    private int scanGeneration, scanPasses, scanStableBottom, scanLastHeight=-1;
+    private static final int MAX_SCROLL_PASSES=24;
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;if(status!=null)status.setText("Pemindaian tidak mendapat respons dari halaman. Tekan Pindai lagi atau buka kategori Videos terlebih dahulu.");} };
+    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(status!=null)status.setText("Pemindaian melewati batas waktu. Halaman mungkin masih memuat konten atau menahan JavaScript. Coba lagi setelah halaman stabil.");} };
 
     private final String script =
         "(function(){try{" +
         "var bad=/(doubleclick|googlesyndication|adservice|popads|exoclick|adsterra|propellerads|advert|sponsor|avatar|logo|pixel|tracking|popup|placeholder|spacer)/i;" +
         "var junk=/(^|\\/)(category|categories|pornstars|stars|sites|tags?|search|login|register|favorites|about|contact)(\\/|$)/i;" +
-        "function abs(x){try{return new URL(x,location.href).href;}catch(e){return '';}}" +
-        "function txt(n){return (n&&n.textContent?n.textContent:'').replace(/\\s+/g,' ').trim();}" +
+        "function abs(x){try{return x?new URL(String(x).trim(),location.href).href:'';}catch(e){return '';}}" +
+        "function txt(n){return(n&&n.textContent?n.textContent:'').replace(/\\s+/g,' ').trim();}" +
         "function goodTitle(t){t=(t||'').replace(/\\s+/g,' ').trim();return t.length>=5&&t.length<=180&&!/^(home|watch|play|video|videos|ads?|advertisement|next|previous|more|menu|login|register)$/i.test(t)&&!bad.test(t);}" +
-        "var out=[],seen={};" +
-        "var isSupjav=/supjav\\.com$/i.test(location.hostname);" +
-        "var anchors=isSupjav?document.querySelectorAll('.posts a[href],.post a[href],article a[href],[class*=video] a[href],[class*=movie] a[href]'):document.querySelectorAll('a[href]');" +
-        "for(var i=0;i<anchors.length&&out.length<180;i++){" +
-        "var a=anchors[i],img=a.querySelector('img');" +
-        "var supCard=null;if(isSupjav){var sp=a;for(var si=0;si<7&&sp;si++,sp=sp.parentElement){var sc=String(sp.className||'');if(/(^|\\s)(post|video|movie|item|entry)(\\s|$)/i.test(sc)||String(sp.tagName||'').toLowerCase()==='article'){supCard=sp;break;}}if(!supCard)continue;}" +
-        "if(!img){var p0=a.parentElement; if(p0&&p0.querySelectorAll('img').length===1)img=p0.querySelector('img');}" +
-        "var box=a;for(var up0=0;up0<4&&box&&box.parentElement;up0++){if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/i.test(String(box.className||'')+' '+String(box.parentElement.className||''))){box=box.parentElement;break;}box=box.parentElement;}" +
-        "var styleText=((a.getAttribute('style')||'')+' '+(a.getAttribute('data-bg')||'')+' '+(a.getAttribute('data-background')||' ')+(box&&box.getAttribute?(' '+(box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):'')),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
-        "var clsHint=(' '+(a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(box&&box.className||'')+' ').toLowerCase();" +
-         // A catalog entry may be a text-only link or use a lazy/background thumbnail.
-         "if(!isSupjav&&!img&&!bgMatch&&!/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/.test(clsHint))continue;" +
-        "var href=abs(a.getAttribute('href'));if(!href)continue;" +
-        "var hu;try{hu=new URL(href);}catch(e){continue;}" +
-        "if(!/^https?:$/.test(hu.protocol)||hu.hostname!==location.hostname||href.split('#')[0]===location.href.split('#')[0])continue;" +
+        "function cardClass(n){var c=' '+String(n&&n.className||'')+' ';return /(^|[\\s_-])(post|video|movie|item|entry|thumb|thumbnail|film|clip|card|media)([\\s_-]|$)/i.test(c);}" +
+        "function sameHost(a,b){a=(a||'').toLowerCase().replace(/^www\\./,'');b=(b||'').toLowerCase().replace(/^www\\./,'');return a===b||a.endsWith('.'+b)||b.endsWith('.'+a);}" +
+        "function firstSrcset(v){if(!v)return '';var p=String(v).split(',')[0].trim();return p.split(/\\s+/)[0]||'';}" +
+        "function imageUrl(im){if(!im)return '';var names=['data-src','data-lazy-src','data-original','data-original-src','data-lazy','data-thumb','data-url','data-image','data-srcset','srcset','src'];for(var k=0;k<names.length;k++){var v=im.getAttribute(names[k]);if(v){if(names[k].indexOf('srcset')>=0)v=firstSrcset(v);var u=abs(v);if(u&&!bad.test(u))return u;}}var cur=abs(im.currentSrc||'');return cur&&!bad.test(cur)?cur:'';}" +
+        "function bgUrl(el){if(!el)return '';var vals=[el.getAttribute('data-bg'),el.getAttribute('data-background'),el.getAttribute('data-original'),el.getAttribute('style')];try{vals.push(getComputedStyle(el).backgroundImage);}catch(e){}for(var q=0;q<vals.length;q++){var v=vals[q]||'',m=v.match(/url\\((.*?)\\)/i);if(m)v=m[1].replace(/^['\"]|['\"]$/g,'');var u=abs(v);if(u&&!bad.test(u))return u;}return '';}" +
+        "var out=[],seen={},anchors=document.querySelectorAll('a[href]'),isSupjav=/supjav\\.com$/i.test(location.hostname),checked=0,cardCandidates=0;" +
+        "for(var i=0;i<anchors.length&&out.length<240;i++){" +
+        "var a=anchors[i],href=abs(a.getAttribute('href'));checked++;if(!href)continue;" +
+        "var hu;try{hu=new URL(href);}catch(e){continue;}if(!/^https?:$/.test(hu.protocol)||!sameHost(hu.hostname,location.hostname)||href.split('#')[0]===location.href.split('#')[0])continue;" +
         "if(junk.test(hu.pathname)||bad.test(hu.hostname+hu.pathname+' '+(a.className||'')))continue;" +
-        "var poster=abs((img&&(img.currentSrc||img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy')||img.getAttribute('data-original-src')||img.getAttribute('data-thumb')||img.getAttribute('data-url')||img.getAttribute('data-srcset')||img.getAttribute('src')||''))||(bgMatch&&bgMatch[1])||'');" +
-        // A missing poster must never discard an otherwise valid video link.
-         "if(poster&&bad.test(poster))poster='';" +
-        "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(box.getBoundingClientRect().width||0);" +
-        "var h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(box.getBoundingClientRect().height||0);" +
-        "if(!isSupjav&&w>0&&w<100)continue;if(!isSupjav&&h>0&&h<70)continue;" +
-        "var ratio=(w>0&&h>0)?w/h:1.4;if(!isSupjav&&(ratio>3.25||ratio<0.32))continue;" +
-        "var card=isSupjav?supCard:a,cl='';" +
-        "for(var up=0;up<5&&card&&card.parentElement;up++){cl=(' '+(card.className||'')+' '+(card.parentElement.className||'')+' ').toLowerCase();" +
-        "if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/.test(cl)){card=card.parentElement;break;}card=card.parentElement;}" +
-        "var heading=card.querySelector('h1,h2,h3,h4,.title,.name,[class*=title]');" +
-        "var title=(a.getAttribute('title')||a.getAttribute('aria-label')||(img?img.getAttribute('alt'):'')||txt(heading)||txt(a)||(isSupjav?'':txt(card))).replace(/\\s+/g,' ').trim();" +
-        "title=title.replace(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b/g,'').replace(/\\s+/g,' ').trim();" +
-        "if(!goodTitle(title))continue;" +
-        "var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
-        "var cls=(' '+(a.className||'')+' '+(card.className||'')+' ').toLowerCase();" +
-        "var score=0;score+=2;if(w>=100&&h>=70)score+=1;if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/.test(cls))score+=2;" +
-        "if(title.length>=8)score+=1;if(cardText.length>=12&&cardText.length<=500)score+=1;" +
-        "if(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b|views?|watch|播放/i.test(cardText))score+=1;" +
-        "if(!isSupjav&&score<((img||bgMatch)?5:4))continue;" +
+        "var candidate=null,fallback=null,cur=a;" +
+        "for(var up=0;up<8&&cur&&cur.parentElement;up++){var p=cur.parentElement,tag=String(p.tagName||'').toLowerCase(),ac=p.querySelectorAll('a[href]').length,imc=p.querySelectorAll('img').length,hasHead=!!p.querySelector('h1,h2,h3,h4,.title,.name,[class*=title],[itemprop=name]');" +
+        "if(!fallback&&ac<=6&&(imc>0||hasHead))fallback=p;" +
+        "if(cardClass(p)||tag==='article'){candidate=p;if(hasHead||ac<=6)break;}cur=p;}" +
+        "var card=candidate||fallback||a.parentElement||a;cardCandidates++;" +
+        "var img=a.querySelector('img')||card.querySelector('img'),poster=imageUrl(img)||bgUrl(a)||bgUrl(card);" +
+        "if(!poster){var bgNodes=card.querySelectorAll('[style],[data-bg],[data-background]');for(var bi=0;bi<bgNodes.length&&!poster;bi++)poster=bgUrl(bgNodes[bi]);}" +
+        "var clsHint=(' '+(a.className||'')+' '+(card.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' ').toLowerCase();" +
+        "if(!isSupjav&&!img&&!poster&&!/(^|[\\s_-])(video|movie|post|thumb|thumbnail|poster|entry|item|card|media|film|clip)([\\s_-]|$)/.test(clsHint))continue;" +
+        "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(card.getBoundingClientRect().width||0),h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(card.getBoundingClientRect().height||0);" +
+        "if(!isSupjav&&w>0&&w<60)continue;if(!isSupjav&&h>0&&h<45)continue;" +
+        "var heading=card.querySelector('h1,h2,h3,h4,.title,.name,[class*=title],[itemprop=name]'),titles=[a.getAttribute('title'),a.getAttribute('data-title'),a.getAttribute('aria-label'),img&&img.getAttribute('alt'),heading&&txt(heading),txt(a),txt(card)],title='';" +
+        "for(var ti=0;ti<titles.length;ti++){if(goodTitle(titles[ti])){title=String(titles[ti]).replace(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b/g,'').replace(/\\s+/g,' ').trim();if(goodTitle(title))break;title='';}}" +
+        "if(!title)continue;var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
         "var key=href.split('#')[0];if(seen[key])continue;seen[key]=1;" +
-        "var frame=card.querySelector('iframe[src]');var embed=frame?abs(frame.getAttribute('src')):href;" +
-        "var host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
-        "out.push({title:title,poster:poster,pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
+        "var frame=card.querySelector('iframe[src]'),embed=frame?abs(frame.getAttribute('src')):href,host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
+        "out.push({title:title,poster:poster||'',pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
         "}" +
-        "var posterCount=0;for(var oi=0;oi<out.length;oi++)if(out[oi].poster)posterCount++;return JSON.stringify({page:location.href,title:document.title,items:out,images:anchors.length,posters:posterCount,adapter:isSupjav?'supjav':'generic'});" +
+        "var imgs=document.images||[],loaded=0,failed=0,lazy=0;for(var ii=0;ii<imgs.length;ii++){var im=imgs[ii];if(im.naturalWidth>0)loaded++;else if(im.complete&&(im.currentSrc||im.src))failed++;if(im.getAttribute('loading')==='lazy'||im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||im.getAttribute('data-original')||im.getAttribute('data-srcset'))lazy++;}" +
+        "var posterCount=0;for(var oi=0;oi<out.length;oi++)if(out[oi].poster)posterCount++;" +
+        "return JSON.stringify({page:location.href,title:document.title,items:out,images:anchors.length,anchorsChecked:checked,cardsExamined:cardCandidates,posters:posterCount,missingPosters:out.length-posterCount,imageElements:imgs.length,imagesLoaded:loaded,imagesFailed:failed,lazyImages:lazy,pageHeight:Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0),adapter:isSupjav?'supjav':'generic'});" +
         "}catch(e){return JSON.stringify({error:String(e),items:[]});}})()";
 
     @Override public void onCreate(Bundle b) {
@@ -110,11 +101,11 @@ public final class SiteScanActivity extends Activity {
         bar.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
         Button stopButton=new Button(this);
         stopButton.setText("Stop");
-        stopButton.setOnClickListener(v->{if(web!=null){web.stopLoading();status.setText("Pemuatan dihentikan. Anda tetap bisa memindai halaman yang sudah terbuka.");}});
+        stopButton.setOnClickListener(v->{if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){web.stopLoading();status.setText("Pemuatan/pemindaian dihentikan. Halaman yang sudah terbuka tetap bisa dipindai lagi.");}});
         bar.addView(stopButton,new LinearLayout.LayoutParams(-2,-2));
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
-        reloadButton.setOnClickListener(v->{if(web!=null){status.setText("Memuat ulang halaman…");web.reload();}});
+        reloadButton.setOnClickListener(v->{if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Memuat ulang halaman…");web.reload();}});
         bar.addView(reloadButton,new LinearLayout.LayoutParams(-2,-2));
         root.addView(bar,new LinearLayout.LayoutParams(-1,-2));
 
@@ -133,6 +124,10 @@ public final class SiteScanActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setLoadsImagesAutomatically(true);
+        settings.setBlockNetworkImage(false);
+        settings.setBlockNetworkLoads(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setSupportMultipleWindows(true);
         settings.setBuiltInZoomControls(true);
@@ -150,8 +145,9 @@ public final class SiteScanActivity extends Activity {
                 android.util.Log.w("StreamHubScan",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());
                 if(m.messageLevel()==android.webkit.ConsoleMessage.MessageLevel.ERROR && status!=null
                     && !m.message().toLowerCase().contains("permission policy violation")
-                    && !m.message().toLowerCase().contains("accelerometer is not allowed")
-                    && !m.message().toLowerCase().contains("gyroscope is not allowed")){
+                    && !m.message().toLowerCase().contains("not allowed in this document")
+                    && !m.message().toLowerCase().contains("accelerometer")
+                    && !m.message().toLowerCase().contains("gyroscope")){
                     status.setText("JavaScript situs memberi error: "+m.message());
                 }
                 return true;
@@ -186,35 +182,106 @@ public final class SiteScanActivity extends Activity {
         web.loadUrl(siteUrl);
     }
 
+    private JSONObject parseJsObject(String value)throws Exception{
+        Object parsed=new org.json.JSONTokener(value==null?"null":value).nextValue();
+        String raw=parsed instanceof String?(String)parsed:String.valueOf(value);
+        return new JSONObject(raw);
+    }
+
     private void scan(boolean manual){
         if(finished||web==null||scanning)return;
         scanning=true;
+        final int generation=++scanGeneration;
+        scanPasses=0;scanStableBottom=0;scanLastHeight=-1;
         handler.removeCallbacks(scanWatchdog);
-        handler.postDelayed(scanWatchdog,10000);
-        status.setText(manual?("Memindai katalog "+adapter.name+" pada halaman ini…"):("Mencoba mendeteksi katalog "+adapter.name+"…"));
+        handler.postDelayed(scanWatchdog,45000);
+        status.setText("Menyiapkan pemindaian "+adapter.name+" — memicu pemuatan gambar dan konten bertahap…");
+        web.evaluateJavascript("(function(){window.__shScanOriginalY=window.scrollY||0;window.scrollTo(0,0);return 'ready';})()",value->{
+            if(!isScanCurrent(generation))return;
+            handler.postDelayed(()->scanScrollStep(generation,manual),350);
+        });
+    }
+
+    private boolean isScanCurrent(int generation){
+        return !finished&&scanning&&generation==scanGeneration&&web!=null;
+    }
+
+    private void scanScrollStep(int generation,boolean manual){
+        if(!isScanCurrent(generation))return;
+        String stepScript="(function(){try{var vh=Math.max(240,window.innerHeight||600),step=Math.max(240,Math.floor(vh*.72));" +
+            "window.scrollBy(0,step);var imgs=document.querySelectorAll('img[loading=lazy],img[data-src],img[data-lazy-src],img[data-original],img[data-srcset]');" +
+            "for(var i=0;i<imgs.length;i++){var r=imgs[i].getBoundingClientRect();if(r.top<vh*1.6&&r.bottom>-vh*.6){try{imgs[i].loading='eager';}catch(e){}}}" +
+            "var h=Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0);" +
+            "return JSON.stringify({y:window.pageYOffset||document.documentElement.scrollTop||0,height:h,view:vh,images:document.images?document.images.length:0,links:document.querySelectorAll('a[href]').length});" +
+            "}catch(e){return JSON.stringify({error:String(e),height:0,y:0,view:600});}})()";
+        web.evaluateJavascript(stepScript,value->{
+            if(!isScanCurrent(generation))return;
+            try{
+                JSONObject p=parseJsObject(value);
+                scanPasses++;
+                int height=p.optInt("height",0),y=p.optInt("y",0),view=p.optInt("view",600);
+                boolean atBottom=height>0&&y+view>=height-16;
+                if(atBottom){if(height==scanLastHeight)scanStableBottom++;else scanStableBottom=1;}
+                else scanStableBottom=0;
+                scanLastHeight=height;
+                if(scanPasses==1||scanPasses%4==0)status.setText("Memuat bertahap… langkah "+scanPasses+"/"+MAX_SCROLL_PASSES+
+                    " • "+p.optInt("links",0)+" tautan • "+p.optInt("images",0)+" elemen gambar");
+                boolean done=scanPasses>=MAX_SCROLL_PASSES||(atBottom&&scanStableBottom>=3);
+                if(done){
+                    final boolean limited=scanPasses>=MAX_SCROLL_PASSES&&!atBottom;
+                    status.setText("Pemuatan bertahap selesai. Mengumpulkan tautan dan poster…");
+                    web.evaluateJavascript("window.scrollTo(0,window.__shScanOriginalY||0);'restored';",ignored->{});
+                    handler.postDelayed(()->runDomScan(generation,manual,limited),450);
+                }else{
+                    handler.postDelayed(()->scanScrollStep(generation,manual),650);
+                }
+            }catch(Exception e){
+                finishScanError(generation,"Gagal memeriksa proses scroll: "+e.getMessage());
+            }
+        });
+    }
+
+    private void runDomScan(int generation,boolean manual,boolean scrollLimited){
+        if(!isScanCurrent(generation))return;
         web.evaluateJavascript(script,value->{
+            if(!isScanCurrent(generation))return;
             handler.removeCallbacks(scanWatchdog);
             scanning=false;
-            if(finished)return;
             try{
-                Object parsed=new org.json.JSONTokener(value==null?"null":value).nextValue();
-                String raw=parsed instanceof String?(String)parsed:String.valueOf(value);
-                JSONObject result=new JSONObject(raw);
+                JSONObject result=parseJsObject(value);
+                result.put("scrollPasses",scanPasses);
+                result.put("scrollLimitReached",scrollLimited);
                 JSONArray items=result.optJSONArray("items");
                 if(items==null)items=new JSONArray();
+                int posters=result.optInt("posters",0),missing=result.optInt("missingPosters",items.length()-posters);
+                String metrics="Tautan diperiksa "+result.optInt("anchorsChecked",0)+
+                    " • gambar dimuat "+result.optInt("imagesLoaded",0)+"/"+result.optInt("imageElements",0)+
+                    " • gagal "+result.optInt("imagesFailed",0)+" • poster "+posters+"/"+items.length()+
+                    " • tanpa poster "+missing+" • scroll "+scanPasses+(scrollLimited?" (batas tercapai)":"");
                 if(items.length()>0){
                     save(result,items);
-                    status.setText("Ditemukan "+items.length()+" kartu video. Indeks disimpan. Anda dapat pindah ke halaman lain dan pindai lagi.");
+                    status.setText("Ditemukan "+items.length()+" kartu video. Indeks disimpan.\n"+metrics+
+                        (missing>0?"\nTautan tanpa poster tetap disimpan.":"")+
+                        "\nAnda dapat membuka halaman lain dan memindai lagi.");
                     Toast.makeText(this,"Katalog: "+items.length()+" item ditemukan",Toast.LENGTH_LONG).show();
                 }else{
                     String msg=result.optString("error","");
-                    status.setText("Belum ada kartu video yang cocok pada halaman ini ("+result.optInt("images",0)+" elemen kandidat diperiksa; adapter "+result.optString("adapter","generic")+"). Buka halaman Videos/kategori, tunggu konten tampil, lalu pindai lagi. "+(msg.isEmpty()?"":msg));
+                    status.setText("Belum ada kartu video yang cocok. "+metrics+
+                        " • kandidat kartu "+result.optInt("cardsExamined",0)+
+                        " • adapter "+result.optString("adapter","generic")+
+                        (msg.isEmpty()?"":" • "+msg));
                     if(manual)Toast.makeText(this,"Belum menemukan kartu katalog pada halaman ini",Toast.LENGTH_LONG).show();
                 }
             }catch(Exception e){
                 status.setText("Gagal membaca hasil pemindaian: "+e.getMessage());
             }
         });
+    }
+
+    private void finishScanError(int generation,String message){
+        if(!isScanCurrent(generation))return;
+        scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);
+        status.setText(message);
     }
 
     private void save(JSONObject result,JSONArray videos)throws Exception{
@@ -278,6 +345,12 @@ public final class SiteScanActivity extends Activity {
             .put("canonicalHost",SiteAdapters.host(result.optString("page",siteUrl)))
             .put("generatedAt",System.currentTimeMillis()).put("pages",pages).put("media",media)
             .put("embeds",embeds).put("videos",merged).put("status","indexed-js")
+            .put("lastScanDiagnostics",new JSONObject().put("anchorsChecked",result.optInt("anchorsChecked",0))
+                .put("cardsExamined",result.optInt("cardsExamined",0)).put("posters",result.optInt("posters",0))
+                .put("missingPosters",result.optInt("missingPosters",0)).put("imageElements",result.optInt("imageElements",0))
+                .put("imagesLoaded",result.optInt("imagesLoaded",0)).put("imagesFailed",result.optInt("imagesFailed",0))
+                .put("lazyImages",result.optInt("lazyImages",0)).put("scrollPasses",result.optInt("scrollPasses",0))
+                .put("scrollLimitReached",result.optBoolean("scrollLimitReached",false)))
             .put("javascriptItems",merged.length())
             .put("limitations","Pemindaian DOM JavaScript pada halaman publik yang dibuka di WebView. Tidak melewati login, paywall, atau proteksi bot.");
         File tmp=new File(f.getParentFile(),f.getName()+".tmp");
