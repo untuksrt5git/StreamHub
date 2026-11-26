@@ -347,12 +347,17 @@ public final class SiteScanActivity extends Activity {
             String key=v.optString("pageUrl","");
             if(key.isEmpty())key=v.optString("embedUrl","");
             if(seen.add(key))merged.put(v);
-            else if(!key.isEmpty()&&!v.optString("poster","").isEmpty()){
+            else if(!key.isEmpty()){
                 for(int j=0;j<merged.length();j++){
                     JSONObject existing=merged.optJSONObject(j);
                     if(existing!=null&&key.equals(existing.optString("pageUrl",existing.optString("embedUrl","")))){
-                        if(existing.optString("poster","").isEmpty())existing.put("poster",v.optString("poster"));
-                        if(existing.optString("title","Video").equals("Video"))existing.put("title",v.optString("title","Video"));
+                        String freshPoster=v.optString("poster","");
+                        if(existing.optString("poster","").isEmpty()&&!freshPoster.isEmpty())existing.put("poster",freshPoster);
+                        String oldTitle=existing.optString("title","");
+                        String freshTitle=v.optString("title","");
+                        boolean oldTitleInvalid=oldTitle.trim().isEmpty()||oldTitle.matches("(?i)^(video|body a site|a site|site body|body|untitled)$");
+                        if(oldTitleInvalid&&!freshTitle.trim().isEmpty())existing.put("title",freshTitle);
+                        if(existing.optString("description","").isEmpty()&&!v.optString("description","").isEmpty())existing.put("description",v.optString("description"));
                         break;
                     }
                 }
