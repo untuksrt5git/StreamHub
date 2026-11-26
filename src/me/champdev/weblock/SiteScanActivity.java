@@ -192,9 +192,18 @@ public final class SiteScanActivity extends Activity {
     }
 
     private JSONObject parseJsObject(String value)throws Exception{
-        Object parsed=new org.json.JSONTokener(value==null?"null":value).nextValue();
-        String raw=parsed instanceof String?(String)parsed:String.valueOf(value);
-        return new JSONObject(raw);
+        if(value==null)throw new org.json.JSONException("JavaScript tidak mengembalikan hasil (null)");
+        Object parsed=new org.json.JSONTokener(value).nextValue();
+        if(parsed instanceof JSONObject)return (JSONObject)parsed;
+        if(parsed instanceof String){
+            String raw=((String)parsed).trim();
+            if(raw.isEmpty()||"null".equals(raw))throw new org.json.JSONException("Hasil JavaScript kosong/null");
+            Object inner=new org.json.JSONTokener(raw).nextValue();
+            if(inner instanceof JSONObject)return (JSONObject)inner;
+            throw new org.json.JSONException("Hasil JavaScript bukan objek JSON: "+inner.getClass().getSimpleName());
+        }
+        if(parsed==JSONObject.NULL)throw new org.json.JSONException("Hasil JavaScript bernilai null, bukan objek JSON");
+        throw new org.json.JSONException("Format hasil JavaScript tidak didukung: "+parsed.getClass().getSimpleName());
     }
 
     private void scan(boolean manual){
