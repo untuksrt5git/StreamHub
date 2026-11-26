@@ -688,7 +688,7 @@ public class Home extends Activity {
         String key = art + "@1280";
         next.setTag(key);
         Bitmap hit = images.get(key);
-        if (hit != null) show(next, hit, arrived); else startLoad(next, art, arrived, 1280, key);
+        if (hit != null) show(next, hit, arrived); else startLoad(next, art, arrived, 1280, key, "");
     }
 
     /** The words of one title in the picture's frame. */
