@@ -445,9 +445,9 @@ public final class SiteScanActivity extends Activity {
                     int newItemCount=autoCrawl?countNewItems(items):0;
                     save(result,items);
                     if(autoCrawl)handleAutoPageResult(items.length(),newItemCount);
-                    status.setText("Ditemukan "+items.length()+" kartu video ("+(autoCrawl?newItemCount+" baru":"hasil halaman")+"). Indeks disimpan.\\n"+metrics+
-                        (missing>0?"\\nTautan tanpa poster tetap disimpan.":"")+
-                        "\\nAnda dapat membuka halaman lain dan memindai lagi.");
+                    status.setText("Ditemukan "+items.length()+" kartu video ("+(autoCrawl?newItemCount+" baru":"hasil halaman")+"). Indeks disimpan.\n"+metrics+
+                        (missing>0?"\nTautan tanpa poster tetap disimpan.":"")+
+                        "\nAnda dapat membuka halaman lain dan memindai lagi.");
                     Toast.makeText(this,"Katalog: "+items.length()+" item ditemukan",Toast.LENGTH_LONG).show();
                 }else{
                     if(autoCrawl){
@@ -467,7 +467,7 @@ public final class SiteScanActivity extends Activity {
                         " • adapter "+result.optString("adapter","generic")+
                         (lastResourceFailure.isEmpty()?"":" • resource terakhir gagal: "+lastResourceFailure)+
                         (msg.isEmpty()?"":" • "+msg)+
-                        (autoCrawl?"\\nPeringatan parser dicatat; status deep scan tidak diubah.":""));
+                        (autoCrawl?"\nPeringatan parser dicatat; status deep scan tidak diubah.":""));
                     if(manual)Toast.makeText(this,"Belum menemukan kartu katalog pada halaman ini",Toast.LENGTH_LONG).show();
                 }
                 if(autoCrawl)discoverAndAdvanceAuto();
