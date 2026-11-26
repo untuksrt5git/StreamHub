@@ -2745,7 +2745,28 @@ public class Home extends Activity {
         intro.setPadding(0, 0, 0, dp(10));
         col.addView(intro);
 
-        List<Sites.Site> sites = Sites.favorites();
+        // Include the authoritative custom-site registry as well as favorites.
+        // This prevents a valid JS index being hidden when the favorite entry is stale.
+        Map<String, Sites.Site> registered = new java.util.LinkedHashMap<>();
+        for (Sites.Site favorite : Sites.favorites()) registered.put(favorite.url, favorite);
+        try {
+            org.json.JSONObject registry = new org.json.JSONObject(Sources.read(new File(getFilesDir(), "custom-sites.json")));
+            org.json.JSONArray entries = registry.optJSONArray("sites");
+            for (int i = 0; entries != null && i < entries.length(); i++) {
+                org.json.JSONObject entry = entries.optJSONObject(i);
+                if (entry == null) continue;
+                String url = entry.optString("url", "");
+                if (!url.matches("(?i)^https?://.+")) continue;
+                Sites.Site site = registered.get(url);
+                if (site == null) site = new Sites.Site();
+                site.url = url;
+                site.name = entry.optString("name", Uri.parse(url).getHost());
+                site.currentUrl = entry.optString("currentUrl", url);
+                site.indexFile = entry.optString("indexFile", WebsiteIndexer.fileName(entry.optString("id", CustomSites.id(url))));
+                registered.put(url, site);
+            }
+        } catch (Exception ignored) { }
+        List<Sites.Site> sites = new ArrayList<>(registered.values());
         if (sites.isEmpty()) {
             col.addView(note("Belum ada website. Tambahkan website dari tab Beranda."));
             return;
