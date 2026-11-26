@@ -674,6 +674,8 @@ public final class SiteScanActivity extends Activity {
         File temp=new File(dir,target.getName()+".tmp."+android.os.Process.myPid()+"."+System.currentTimeMillis());
         File backup=new File(dir,target.getName()+".bak");
         byte[] bytes=data.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        boolean oldMoved=false;
+        boolean installed=false;
         try{
             try(FileOutputStream out=new FileOutputStream(temp)){
                 out.write(bytes);
@@ -681,16 +683,54 @@ public final class SiteScanActivity extends Activity {
                 out.getFD().sync();
             }
             validateCatalogFile(temp);
-            if(backup.exists()&&!backup.delete())throw new java.io.IOException("Tidak dapat membersihkan backup lama");
-            if(target.exists()&&!target.renameTo(backup))throw new java.io.IOException("Tidak dapat memindahkan katalog lama ke backup");
-            if(!temp.renameTo(target)){
-                if(backup.exists()&&!target.exists())backup.renameTo(target);
-                throw new java.io.IOException("Penggantian katalog gagal; katalog lama dipulihkan bila tersedia");
+            // Never discard the only known-good backup to make room for a backup
+            // of an unvalidated target.
+            if(target.exists()&&!isValidCatalogFile(target)){
+                if(isValidCatalogFile(backup))throw new java.io.IOException("Katalog aktif rusak; backup sehat dipertahankan untuk pemulihan");
+                throw new java.io.IOException("Katalog lama tidak valid; penggantian dibatalkan demi mencegah kehilangan data");
             }
+            if(backup.exists()&&!backup.delete())throw new java.io.IOException("Tidak dapat membersihkan backup lama");
+            if(target.exists()){
+                if(!target.renameTo(backup))throw new java.io.IOException("Tidak dapat memindahkan katalog lama ke backup");
+                oldMoved=true;
+                syncDirectory(dir);
+            }
+            if(!temp.renameTo(target))throw new java.io.IOException("Penggantian katalog gagal saat memasang file sementara");
+            installed=true;
+            syncDirectory(dir);
             validateCatalogFile(target);
-            // Target is now valid. Keep one known-good backup until the next successful save.
+            // Keep the previous known-good catalog as the recovery copy.
+        }catch(Exception failure){
+            // Roll back on every failure after moving the previous catalog,
+            // including a failed validation after the new file was installed.
+            if(oldMoved&&isValidCatalogFile(backup)){
+                if(target.exists()&&!target.delete()){
+                    failure.addSuppressed(new java.io.IOException("File katalog baru gagal dihapus saat rollback"));
+                }else if(!backup.renameTo(target)){
+                    failure.addSuppressed(new java.io.IOException("Backup katalog gagal dipulihkan ke lokasi utama"));
+                }else{
+                    installed=false;
+                    try{syncDirectory(dir);}catch(Exception syncFailure){failure.addSuppressed(syncFailure);}
+                }
+            }
+            throw failure;
         }finally{
             if(temp.exists())temp.delete();
+            if(installed)try{syncDirectory(dir);}catch(Exception e){android.util.Log.w("StreamHubScan","Directory sync unavailable: "+e.getMessage());}
+        }
+    }
+
+    /** Best-effort persistence of rename metadata on Android/Linux. */
+    private void syncDirectory(File dir)throws Exception{
+        if(android.os.Build.VERSION.SDK_INT>=21){
+            java.io.FileDescriptor fd=null;
+            try{
+                java.io.FileDescriptor opened=android.system.Os.open(dir.getAbsolutePath(),android.system.OsConstants.O_RDONLY,0);
+                try{android.system.Os.fsync(opened);}finally{android.system.Os.close(opened);}
+            }catch(android.system.ErrnoException e){
+                // Some Android filesystems do not permit fsync on directory descriptors.
+                android.util.Log.w("StreamHubScan","Directory fsync unsupported: "+e.getMessage());
+            }
         }
     }
 
