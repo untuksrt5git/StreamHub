@@ -2925,7 +2925,7 @@ public class Home extends Activity {
         placeholder.setBackground(rounded(CARD_HI, dp(9)));
         frame.addView(placeholder, new FrameLayout.LayoutParams(-1, dp(imageHeight)));
         card.addView(frame);
-        if (poster.startsWith("http")) loadImage(image, poster, placeholder, App.tv ? 480 : 240);
+        if (poster.startsWith("http")) loadImage(image, poster, placeholder, App.tv ? 480 : 240, pageUrl);
         TextView name = text(title, sp(14, 12), TEXT, true);
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
@@ -3278,16 +3278,21 @@ public class Home extends Activity {
 
     /** `min`: the least width in pixels the picture is kept at (the card's own width; backdrops more). Decoded once per size, shared by every card that shows it. */
     void loadImage(ImageView into, String url, View placeholder, int min) {
+        loadImage(into, url, placeholder, min, "");
+    }
+
+    /** Website posters may be protected against hotlinking: fetch them with the catalog page as Referer. */
+    void loadImage(ImageView into, String url, View placeholder, int min, String referer) {
         String key = url + "@" + min;
         into.setTag(key);
         Bitmap hit = images.get(key);
         if (hit != null) { show(into, hit, placeholder); return; }
         if (lazyImages()) {   // fetched and decoded when the card is on screen or close to it, not for a whole page of rows at once
-            lazy.add(new Object[]{into, (Runnable) () -> startLoad(into, url, placeholder, min, key)});
+            lazy.add(new Object[]{into, (Runnable) () -> startLoad(into, url, placeholder, min, key, referer)});
             if (lazy.size() == 1) into.post(this::checkLazy);
             return;
         }
-        startLoad(into, url, placeholder, min, key);
+        startLoad(into, url, placeholder, min, key, referer);
     }
 
     /** Whether this screen loads pictures as they come near the screen (a recycling grid loads its own way). */
@@ -3313,7 +3318,7 @@ public class Home extends Activity {
         }
     }
 
-    void startLoad(ImageView into, String url, View placeholder, int min, String key) {
+    void startLoad(ImageView into, String url, View placeholder, int min, String key, String referer) {
         java.util.function.Consumer<Bitmap> done = b -> {
             if (b == null || !key.equals(into.getTag())) return;   // failed, or the view shows something else by now
             boolean had = into.getDrawable() != null;   // another size already shows: swapped in place, no fade from nothing
@@ -3328,7 +3333,7 @@ public class Home extends Activity {
             loading.put(key, new ArrayList<>(java.util.Collections.singletonList(done)));
         }
         imagePool.execute(() -> {
-            Bitmap b = fetch(url, min);
+            Bitmap b = fetch(url, min, referer);
             if (b != null) images.put(key, b);
             List<java.util.function.Consumer<Bitmap>> waiting;
             synchronized (loading) { waiting = loading.remove(key); }
@@ -3348,7 +3353,7 @@ public class Home extends Activity {
     }
 
     static Bitmap fetch(String url) {
-        return fetch(url, 480);
+        return fetch(url, 480, "");
     }
 
     /** Pictures nobody has looked at for 60 days leave the disk (reading one counts as looking), and the oldest go first when the folder passes 200 MB. */
@@ -3365,6 +3370,10 @@ public class Home extends Activity {
     }
 
     static Bitmap fetch(String url, int min) {
+        return fetch(url, min, "");
+    }
+
+    static Bitmap fetch(String url, int min, String referer) {
         Long bad = failed.get(url);
         if (bad != null && System.currentTimeMillis() - bad < 90 * 1000) return null;   // short cooldown: transient host failures can recover quickly
         try {
@@ -3379,7 +3388,7 @@ public class Home extends Activity {
                 File tmp = new File(dir, name + "." + Thread.currentThread().getId() + ".tmp");   // two sizes of one picture can load at once
                 Exception downloadError = null;
                 for (int attempt = 0; attempt < 2; attempt++) {
-                    try (InputStream in = Warp.openPublic(url, 7000, 22000); FileOutputStream out = new FileOutputStream(tmp)) {
+                    try (InputStream in = Warp.openPublic(url, 7000, 22000, referer); FileOutputStream out = new FileOutputStream(tmp)) {
                         byte[] buf = new byte[16384];
                         for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
                         downloadError = null;
