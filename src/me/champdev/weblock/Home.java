@@ -2880,36 +2880,93 @@ public class Home extends Activity {
             int order = a.optString("title", "").compareToIgnoreCase(b.optString("title", ""));
             return indexedSortMode == 1 ? order : -order;
         });
+        // Keep the catalog compact: show at most seven videos in each subcategory.
+        // A subcategory's "Lihat semua" opens that category with seven items per page.
+        final int SUBCATEGORY_LIMIT = 7;
         int total = filtered.size();
-        int pages = Math.max(1, (total + indexedCatalogPageSize - 1) / indexedCatalogPageSize);
-        indexedCatalogPage = Math.max(0, Math.min(indexedCatalogPage, pages - 1));
-
-        LinearLayout pageTools = new LinearLayout(this);
-        pageTools.setOrientation(LinearLayout.HORIZONTAL);
-        pageTools.setGravity(Gravity.CENTER_VERTICAL);
-        TextView sizeButton = text("Per halaman: " + indexedCatalogPageSize + " ▾", sp(12, 10), MUTED, true);
-        sizeButton.setPadding(dp(8), dp(8), dp(8), dp(8));
-        sizeButton.setOnClickListener(v -> {
-            String[] sizes = {"12", "20", "30", "40", "60", "96"};
-            new AlertDialog.Builder(this).setTitle("Jumlah video per halaman").setItems(sizes, (d, which) -> {
-                indexedCatalogPageSize = Integer.parseInt(sizes[which]); indexedCatalogPage = 0; build();
-            }).show();
-        });
-        pageTools.addView(sizeButton, new LinearLayout.LayoutParams(0, -2, 1));
-        pageTools.addView(text(total + " video • " + pages + " halaman", sp(12, 10), MUTED, false));
-        col.addView(pageTools);
+        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density);
+        int usableWidth = Math.max(240, screenWidthDp - 2 * side);
+        int minCardWidth = App.tv ? 190 : (getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 150 : 142);
+        int columns = Math.max(2, Math.min(App.tv ? 6 : 5, usableWidth / minCardWidth));
 
         if (total == 0) {
             col.addView(note("Tidak ada video untuk filter ini. Pilih kelompok atau jenis lain."));
             return;
         }
 
-        int from = indexedCatalogPage * indexedCatalogPageSize;
-        int to = Math.min(total, from + indexedCatalogPageSize);
-        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density);
-        int usableWidth = Math.max(240, screenWidthDp - 2 * side);
-        int minCardWidth = App.tv ? 190 : (getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 150 : 142);
-        int columns = Math.max(2, Math.min(App.tv ? 6 : 5, usableWidth / minCardWidth));
+        if (indexedCategoryFilter.isEmpty()) {
+            // All categories: render independent compact groups, preserving source order.
+            Map<String, List<org.json.JSONObject>> byCategory = new java.util.LinkedHashMap<>();
+            for (org.json.JSONObject video : filtered) {
+                String category = video.optString("category", "video");
+                if (category.isEmpty()) category = "video";
+                if (!byCategory.containsKey(category)) byCategory.put(category, new ArrayList<>());
+                byCategory.get(category).add(video);
+            }
+            int shownTotal = 0;
+            for (Map.Entry<String, List<org.json.JSONObject>> group : byCategory.entrySet()) {
+                String category = group.getKey();
+                List<org.json.JSONObject> videos = group.getValue();
+                int shown = Math.min(SUBCATEGORY_LIMIT, videos.size());
+                shownTotal += shown;
+                TextView subheading = heading(category + "  ·  " + videos.size());
+                col.addView(subheading);
+                LinearLayout row = null;
+                int inRow = 0;
+                for (int i = 0; i < shown; i++) {
+                    org.json.JSONObject video = videos.get(i);
+                    String title = video.optString("title", "Video");
+                    String poster = video.optString("poster", "");
+                    String embedUrl = video.optString("embedUrl", "");
+                    String pageUrl = video.optString("pageUrl", "");
+                    String posterReferer = video.optString("posterReferer", pageUrl);
+                    String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
+                    if (playUrl.isEmpty()) continue;
+                    if (row == null || inRow >= columns) {
+                        row = new LinearLayout(this);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        row.setGravity(Gravity.TOP);
+                        col.addView(row);
+                        inRow = 0;
+                    }
+                    row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer,
+                        video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")),
+                        new LinearLayout.LayoutParams(0, -2, 1));
+                    inRow++;
+                }
+                if (row != null && inRow > 0 && inRow < columns)
+                    while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+
+                if (videos.size() > SUBCATEGORY_LIMIT) {
+                    TextView more = text("Lihat semua " + category + "  ·  " + videos.size() + " video  ›",
+                        sp(12, 11), TEXT, true);
+                    more.setPadding(dp(12), dp(9), dp(12), dp(9));
+                    more.setBackground(rounded(CARD_HI, dp(9)));
+                    more.setOnClickListener(v -> {
+                        indexedCategoryFilter = category;
+                        indexedCatalogPageSize = SUBCATEGORY_LIMIT;
+                        indexedCatalogPage = 0;
+                        build();
+                    });
+                    focusable(more, dp(9));
+                    LinearLayout.LayoutParams moreLp = new LinearLayout.LayoutParams(-2, -2);
+                    moreLp.bottomMargin = dp(12);
+                    col.addView(more, moreLp);
+                }
+            }
+            col.addView(text(shownTotal + " poster ditampilkan dari " + total + " video • maksimal 7 per subkategori",
+                sp(12, 10), MUTED, false));
+            return;
+        }
+
+        // One selected subcategory: keep all its entries reachable, seven per page.
+        indexedCatalogPageSize = SUBCATEGORY_LIMIT;
+        int pages = Math.max(1, (total + SUBCATEGORY_LIMIT - 1) / SUBCATEGORY_LIMIT);
+        indexedCatalogPage = Math.max(0, Math.min(indexedCatalogPage, pages - 1));
+        int from = indexedCatalogPage * SUBCATEGORY_LIMIT;
+        int to = Math.min(total, from + SUBCATEGORY_LIMIT);
+        col.addView(text(total + " video • " + pages + " halaman • 7 per halaman",
+            sp(12, 10), MUTED, false));
         LinearLayout row = null;
         int inRow = 0;
         for (int i = from; i < to; i++) {
@@ -2928,10 +2985,13 @@ public class Home extends Activity {
                 col.addView(row);
                 inRow = 0;
             }
-            row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer, video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")), new LinearLayout.LayoutParams(0, -2, 1));
+            row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer,
+                video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")),
+                new LinearLayout.LayoutParams(0, -2, 1));
             inRow++;
         }
-        if (row != null && inRow < columns) while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        if (row != null && inRow > 0 && inRow < columns)
+            while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
 
         LinearLayout pager = new LinearLayout(this);
         pager.setGravity(Gravity.CENTER);
