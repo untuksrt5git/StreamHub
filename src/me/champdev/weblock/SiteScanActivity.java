@@ -496,7 +496,23 @@ public final class SiteScanActivity extends Activity {
         autoCategoryNewItems.clear();autoCategoryValidPages.clear();autoCategoryParserWarnings.clear();
         autoCategoryStopAfterPage.clear();autoParseRetries.clear();
         autoCompleted=0;autoDiscovered=0;
-        enqueueAuto(siteUrl,autoKey(siteRootUrl));
+        // A saved "currentUrl" can point to an OMG mirror/redirect host while
+        // siteRootUrl remains the registered canonical host. Never let that
+        // mismatch silently reject the very first crawler page.
+        String initialUrl=siteUrl;
+        String rootHost=SiteAdapters.host(siteRootUrl);
+        String initialHost=SiteAdapters.host(initialUrl);
+        if(!rootHost.isEmpty()&&!initialHost.isEmpty()
+                &&!(initialHost.equals(rootHost)||initialHost.endsWith("."+rootHost))){
+            initialUrl=siteRootUrl;
+        }
+        if(initialUrl==null||initialUrl.trim().isEmpty())initialUrl=siteRootUrl;
+        enqueueAuto(initialUrl,autoKey(siteRootUrl));
+        if(autoQueue.isEmpty()){
+            autoCrawl=false;
+            status.setText("Scraping OMG tidak dimulai: URL halaman utama ditolak. Periksa alamat sumber website, lalu muat ulang halaman dan coba lagi. URL: "+String.valueOf(initialUrl));
+            return;
+        }
         autoNextPage();
     }
 
