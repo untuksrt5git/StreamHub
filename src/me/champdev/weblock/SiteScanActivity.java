@@ -157,18 +157,11 @@ public final class SiteScanActivity extends Activity {
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
             }
             @Override public void onPageFinished(WebView v,String url){
-                status.setText("Halaman selesai dimuat: "+url+" — menyiapkan pemindaian katalog otomatis…");
+                // Do not start DOM scrolling while the site is still rendering.
+                // Keep normal browsing stable; scanning is explicitly user-triggered.
+                status.setText("Halaman siap: "+url+" — telusuri katalog, lalu tekan Pindai sekarang.");
                 v.evaluateJavascript("(function(){var b=document.body;return JSON.stringify({ready:document.readyState,title:document.title,host:location.hostname,bodyText:b?(b.innerText||'').trim().length:0,html:b?b.innerHTML.length:0,frames:document.querySelectorAll('iframe').length,scripts:document.scripts.length});})()",diag->{
-                    if(finished)return;
-                    if(diag!=null) android.util.Log.d("StreamHubScan","Page ready "+diag);
-                    if(url==null||url.isEmpty()||url.equals(lastAutoScanUrl))return;
-                    lastAutoScanUrl=url;
-                    handler.postDelayed(()->{
-                        if(!finished&&web!=null&&!scanning&&url.equals(web.getUrl())){
-                            status.setText("Memindai katalog otomatis: "+url);
-                            scan(false);
-                        }
-                    },1400);
+                    if(!finished&&diag!=null) android.util.Log.d("StreamHubScan","Page ready "+diag);
                 });
             }
             @Override public void onReceivedHttpError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceResponse response){
