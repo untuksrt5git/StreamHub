@@ -72,7 +72,7 @@ public final class SiteScanActivity extends Activity {
         "var score=0;score+=2;if(w>=100&&h>=70)score+=1;if(/video|movie|post|thumb|poster|entry|item|card|media|film/.test(cls))score+=2;" +
         "if(title.length>=8)score+=1;if(cardText.length>=12&&cardText.length<=500)score+=1;" +
         "if(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b|views?|watch|播放/i.test(cardText))score+=1;" +
-        "if(score<5)continue;" +
+        "if(score<((img||bgMatch)?5:4))continue;" +
         "var key=href.split('#')[0];if(seen[key])continue;seen[key]=1;" +
         "var frame=card.querySelector('iframe[src]');var embed=frame?abs(frame.getAttribute('src')):href;" +
         "var host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
