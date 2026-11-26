@@ -401,6 +401,7 @@ public final class SiteScanActivity extends Activity {
                     String detail=diag==null?"diagnostik juga null":diag;
                     status.setText("Scanner tidak menerima hasil JavaScript katalog. Pemeriksaan halaman: "+detail+
                         ". Coba muat ulang halaman, tunggu katalog tampil, lalu pindai lagi. Jika berulang, kirim teks ini.");
+                    if(autoCrawl)discoverAndAdvanceAuto();
                 });
                 return;
             }
@@ -522,6 +523,7 @@ public final class SiteScanActivity extends Activity {
         if(!isScanCurrent(generation))return;
         scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);
         status.setText(message);
+        if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);
     }
 
     private void save(JSONObject result,JSONArray videos)throws Exception{
