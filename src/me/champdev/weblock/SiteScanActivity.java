@@ -552,7 +552,13 @@ public final class SiteScanActivity extends Activity {
             android.net.Uri u=android.net.Uri.parse(value);
             if(!("http".equalsIgnoreCase(u.getScheme())||"https".equalsIgnoreCase(u.getScheme())))return;
             String root=SiteAdapters.host(siteRootUrl),host=SiteAdapters.host(value);
-            if(root.isEmpty()||host.isEmpty()||!(host.equals(root)||host.endsWith("."+root)))return;
+            String loadedHost=web==null?"":SiteAdapters.host(web.getUrl());
+            boolean matchesRoot=!root.isEmpty()&&(host.equals(root)||host.endsWith("."+root));
+            // OMG may redirect the registered homepage to its canonical/mirror
+            // hostname. Accept links on that actual loaded host as well, while
+            // still rejecting unrelated external domains.
+            boolean matchesLoaded=!loadedHost.isEmpty()&&(host.equals(loadedHost)||host.endsWith("."+loadedHost));
+            if(host.isEmpty()||(!matchesRoot&&!matchesLoaded))return;
             int count=autoCategoryPageCounts.containsKey(category)?autoCategoryPageCounts.get(category):0;
             int pageNumber=count+1;
             Integer stopAfter=autoCategoryStopAfterPage.get(category);
