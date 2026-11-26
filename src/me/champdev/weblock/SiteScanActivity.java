@@ -203,8 +203,9 @@ public final class SiteScanActivity extends Activity {
         String js="(function(){try{if(window.__shPosterWarmupRunning)return 'busy';"+
             "window.__shPosterWarmupRunning=true;window.__shPosterWarmupCancel=false;"+
             "var original=window.pageYOffset||0,steps=0,stable=0,lastHeight=0;"+
-            "function promote(){var all=document.querySelectorAll('img,source');"+
-            "for(var i=0;i<all.length;i++){var n=all[i],src=n.getAttribute('data-src')||n.getAttribute('data-lazy-src')||n.getAttribute('data-original-src')||n.getAttribute('data-original')||n.getAttribute('data-lazy')||n.getAttribute('data-image')||n.getAttribute('data-poster')||n.getAttribute('data-thumb');"+
+            "function promote(){var all=document.querySelectorAll('img,source'),vh=Math.max(240,window.innerHeight||600);"+
+            "for(var i=0;i<all.length;i++){var n=all[i],r=n.getBoundingClientRect();if(r.top>vh*1.8||r.bottom< -vh*.5)continue;"+
+            "var src=n.getAttribute('data-src')||n.getAttribute('data-lazy-src')||n.getAttribute('data-original-src')||n.getAttribute('data-original')||n.getAttribute('data-lazy')||n.getAttribute('data-image')||n.getAttribute('data-poster')||n.getAttribute('data-thumb');"+
             "var set=n.getAttribute('data-srcset')||n.getAttribute('data-lazy-srcset')||n.getAttribute('data-original-srcset');"+
             "if(set&&!n.getAttribute('srcset'))n.setAttribute('srcset',set);"+
             "if(src&&n.tagName.toLowerCase()==='img'&&(!n.getAttribute('src')||/^data:image\\/(gif|svg)/i.test(n.getAttribute('src'))))n.setAttribute('src',src);"+
