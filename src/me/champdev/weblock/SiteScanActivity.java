@@ -33,6 +33,7 @@ public final class SiteScanActivity extends Activity {
     private boolean finished, scanning;
     private int scanGeneration, scanPasses, scanStableBottom, scanLastHeight=-1;
     private int resourceHttpErrors, resourceNetworkErrors;
+    private int domNullRetries;
     private String lastResourceFailure="";
     private static final int MAX_SCROLL_PASSES=32;
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -210,18 +211,33 @@ public final class SiteScanActivity extends Activity {
         if(finished||web==null||scanning)return;
         scanning=true;
         final int generation=++scanGeneration;
-        scanPasses=0;scanStableBottom=0;scanLastHeight=-1;
+        scanPasses=0;scanStableBottom=0;scanLastHeight=-1;domNullRetries=0;
         handler.removeCallbacks(scanWatchdog);
         handler.postDelayed(scanWatchdog,90000);
         status.setText("Menyiapkan pemindaian "+adapter.name+" — memicu pemuatan gambar dan konten bertahap…");
-        web.evaluateJavascript("(function(){window.__shScanOriginalY=window.scrollY||0;window.scrollTo(0,0);return 'ready';})()",value->{
-            if(!isScanCurrent(generation))return;
-            handler.postDelayed(()->scanScrollStep(generation,manual),350);
-        });
+        waitForPageReady(generation,manual,0);
     }
 
     private boolean isScanCurrent(int generation){
         return !finished&&scanning&&generation==scanGeneration&&web!=null;
+    }
+
+    private void waitForPageReady(int generation,boolean manual,int attempt){
+        if(!isScanCurrent(generation))return;
+        String probe="JSON.stringify({ready:document.readyState,images:document.images?document.images.length:0,loaded:(function(){var n=0,a=document.images||[];for(var i=0;i<a.length;i++)if(a[i].complete&&a[i].naturalWidth>0)n++;return n;})(),height:Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0)})";
+        web.evaluateJavascript(probe,value->{
+            if(!isScanCurrent(generation))return;
+            boolean ready=value!=null&&value.contains("\\"complete\\"") ;
+            if(!ready&&attempt<15){
+                status.setText("Menunggu halaman stabil… pemeriksaan "+(attempt+1)+"/15 • "+(value==null?"belum ada respons":value));
+                handler.postDelayed(()->waitForPageReady(generation,manual,attempt+1),800);
+                return;
+            }
+            web.evaluateJavascript("(function(){window.__shScanOriginalY=window.scrollY||0;window.scrollTo(0,0);return 'ready';})()",ignored->{
+                if(!isScanCurrent(generation))return;
+                handler.postDelayed(()->scanScrollStep(generation,manual),500);
+            });
+        });
     }
 
     private void scanScrollStep(int generation,boolean manual){
@@ -311,7 +327,13 @@ public final class SiteScanActivity extends Activity {
         web.evaluateJavascript(script,value->{
             if(!isScanCurrent(generation))return;
             if(value==null || "null".equals(value.trim())){
-                status.setText("Hasil pemindaian utama kosong. Memeriksa apakah JavaScript halaman masih berjalan…");
+                if(domNullRetries<3){
+                    domNullRetries++;
+                    status.setText("Hasil JavaScript belum diterima. Mencoba ulang pembacaan katalog "+domNullRetries+"/3…");
+                    handler.postDelayed(()->runDomScan(generation,manual,scrollLimited),1400);
+                    return;
+                }
+                status.setText("Hasil pemindaian utama kosong setelah 3 percobaan. Memeriksa apakah JavaScript halaman masih berjalan…");
                 web.evaluateJavascript("JSON.stringify({page:location.href,title:document.title,ready:document.readyState,images:document.images?document.images.length:0,links:document.querySelectorAll('a[href]').length,body:!!document.body,bodyText:document.body?(document.body.innerText||'').length:0})",diag->{
                     if(!isScanCurrent(generation))return;
                     handler.removeCallbacks(scanWatchdog);
