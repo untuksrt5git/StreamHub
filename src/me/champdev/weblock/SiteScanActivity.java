@@ -41,6 +41,8 @@ public final class SiteScanActivity extends Activity {
     private final java.util.LinkedHashMap<String,String> autoPageCategories=new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String,Integer> autoPageNumbers=new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String,Integer> autoCategoryNewItems=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,Integer> autoCategoryValidPages=new java.util.LinkedHashMap<>();
+    private final java.util.HashSet<String> autoCategoryParserWarnings=new java.util.HashSet<>();
     private final java.util.LinkedHashMap<String,Integer> autoCategoryStopAfterPage=new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String,Integer> autoParseRetries=new java.util.LinkedHashMap<>();
     private int autoCurrentPage=1;
@@ -417,7 +419,7 @@ public final class SiteScanActivity extends Activity {
                     String detail=diag==null?"diagnostik juga null":diag;
                     status.setText("Scanner tidak menerima hasil JavaScript katalog. Pemeriksaan halaman: "+detail+
                         ". Coba muat ulang halaman, tunggu katalog tampil, lalu pindai lagi. Jika berulang, kirim teks ini.");
-                    if(autoCrawl)discoverAndAdvanceAuto();
+                    if(autoCrawl){autoCategoryParserWarnings.add(autoCurrentCategory);discoverAndAdvanceAuto();}
                 });
                 return;
             }
@@ -459,6 +461,7 @@ public final class SiteScanActivity extends Activity {
                         }
                     }
                     String msg=result.optString("error","");
+                    if(autoCrawl)autoCategoryParserWarnings.add(autoCurrentCategory);
                     status.setText("Belum ada kartu video yang cocok. "+metrics+
                         " • kandidat kartu "+result.optInt("cardsExamined",0)+
                         " • adapter "+result.optString("adapter","generic")+
@@ -470,7 +473,7 @@ public final class SiteScanActivity extends Activity {
                 if(autoCrawl)discoverAndAdvanceAuto();
             }catch(Exception e){
                 status.setText("Gagal membaca hasil pemindaian: "+e.getMessage());
-                if(autoCrawl)discoverAndAdvanceAuto();
+                if(autoCrawl){autoCategoryParserWarnings.add(autoCurrentCategory);discoverAndAdvanceAuto();}
             }
         });
     }
@@ -490,7 +493,8 @@ public final class SiteScanActivity extends Activity {
         autoGeneration++;
         autoCrawl=true;autoQueue.clear();autoQueued.clear();autoVisited.clear();
         autoCategoryPageCounts.clear();autoPageCategories.clear();autoPageNumbers.clear();
-        autoCategoryNewItems.clear();autoCategoryStopAfterPage.clear();autoParseRetries.clear();
+        autoCategoryNewItems.clear();autoCategoryValidPages.clear();autoCategoryParserWarnings.clear();
+        autoCategoryStopAfterPage.clear();autoParseRetries.clear();
         autoCompleted=0;autoDiscovered=0;
         enqueueAuto(siteUrl,autoKey(siteRootUrl));
         autoNextPage();
@@ -661,10 +665,14 @@ public final class SiteScanActivity extends Activity {
         String category=autoCurrentCategory;
         int page=autoCurrentPage;
         autoParseRetries.remove(autoKey(autoCurrentUrl));
+        int validPages=autoCategoryValidPages.containsKey(category)?autoCategoryValidPages.get(category):0;
+        autoCategoryValidPages.put(category,validPages+1);
         if(page<=2){
             int accumulated=autoCategoryNewItems.containsKey(category)?autoCategoryNewItems.get(category):0;
             autoCategoryNewItems.put(category,accumulated+newItemCount);
-            if(page==2&&autoCategoryNewItems.get(category)==0&&hasCompletedDeepScan(category)){
+            if(page==2&&autoCategoryValidPages.get(category)>=2
+                &&!autoCategoryParserWarnings.contains(category)
+                &&autoCategoryNewItems.get(category)==0&&hasCompletedDeepScan(category)){
                 stopCategoryAfterPage(category,2);
                 status.setText("Kategori sudah dikenal: halaman 1–2 tidak memiliki item baru. Halaman 3–5 dilewati berdasarkan deep scan sebelumnya.");
                 return;
@@ -673,6 +681,8 @@ public final class SiteScanActivity extends Activity {
         if(page>=3&&(newItemCount==0||page>=AUTO_MAX_PAGES_PER_CATEGORY)){
             stopCategoryAfterPage(category,page);
             try{
+                // A parser warning on any page means this category's deep scan is incomplete.
+                if(autoCategoryParserWarnings.contains(category))return;
                 // This marker is written only after save(result, items) completed atomically.
                 markDeepScanCompleted(category);
                 status.setText("Deep scan kategori selesai pada halaman "+page+"; status tersimpan setelah katalog berhasil disimpan.");
