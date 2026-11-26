@@ -43,15 +43,15 @@ public final class SiteScanActivity extends Activity {
         "function goodTitle(t){t=(t||'').replace(/\\s+/g,' ').trim();return t.length>=5&&t.length<=180&&!/^(home|watch|play|video|videos|ads?|advertisement|next|previous|more|menu|login|register)$/i.test(t)&&!bad.test(t);}" +
         "var out=[],seen={};" +
         "var isSupjav=/supjav\\.com$/i.test(location.hostname);" +
-        "var anchors=isSupjav?document.querySelectorAll('.posts.clearfix>.post>a.img[title],.posts>.post>a.img[title],.posts .post h3 a[rel=bookmark][itemprop=url],.posts .post h3 a[rel=bookmark],.post a.img[title]'):document.querySelectorAll('a[href]');" +
+        "var anchors=isSupjav?document.querySelectorAll('.posts a[href],.post a[href],article a[href],[class*=video] a[href],[class*=movie] a[href]'):document.querySelectorAll('a[href]');" +
         "for(var i=0;i<anchors.length&&out.length<180;i++){" +
         "var a=anchors[i],img=a.querySelector('img');" +
         "if(!img){var p0=a.parentElement; if(p0&&p0.querySelectorAll('img').length===1)img=p0.querySelector('img');}" +
-        "var box=a;for(var up0=0;up0<4&&box&&box.parentElement;up0++){if(/video|movie|post|thumb|poster|entry|item|card|media|film/i.test(String(box.className||'')+' '+String(box.parentElement.className||''))){box=box.parentElement;break;}box=box.parentElement;}" +
+        "var box=a;for(var up0=0;up0<4&&box&&box.parentElement;up0++){if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/i.test(String(box.className||'')+' '+String(box.parentElement.className||''))){box=box.parentElement;break;}box=box.parentElement;}" +
         "var styleText=((a.getAttribute('style')||'')+' '+(a.getAttribute('data-bg')||'')+' '+(a.getAttribute('data-background')||' ')+(box&&box.getAttribute?(' '+(box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):'')),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
         "var clsHint=(' '+(a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(box&&box.className||'')+' ').toLowerCase();" +
          // A catalog entry may be a text-only link or use a lazy/background thumbnail.
-         "if(!isSupjav&&!img&&!bgMatch&&!/video|movie|post|thumb|poster|entry|item|card|media|film/.test(clsHint))continue;" +
+         "if(!isSupjav&&!img&&!bgMatch&&!/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/.test(clsHint))continue;" +
         "var href=abs(a.getAttribute('href'));if(!href)continue;" +
         "var hu;try{hu=new URL(href);}catch(e){continue;}" +
         "if(!/^https?:$/.test(hu.protocol)||hu.hostname!==location.hostname||href.split('#')[0]===location.href.split('#')[0])continue;" +
@@ -65,14 +65,14 @@ public final class SiteScanActivity extends Activity {
         "var ratio=(w>0&&h>0)?w/h:1.4;if(!isSupjav&&(ratio>3.25||ratio<0.32))continue;" +
         "var card=a,cl='';" +
         "for(var up=0;up<5&&card&&card.parentElement;up++){cl=(' '+(card.className||'')+' '+(card.parentElement.className||'')+' ').toLowerCase();" +
-        "if(/video|movie|post|thumb|poster|entry|item|card|media|film/.test(cl)){card=card.parentElement;break;}card=card.parentElement;}" +
+        "if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/.test(cl)){card=card.parentElement;break;}card=card.parentElement;}" +
         "var heading=card.querySelector('h1,h2,h3,h4,.title,.name,[class*=title]');" +
         "var title=(a.getAttribute('title')||a.getAttribute('aria-label')||(img?img.getAttribute('alt'):'')||txt(heading)||txt(a)||txt(card)).replace(/\\s+/g,' ').trim();" +
         "title=title.replace(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b/g,'').replace(/\\s+/g,' ').trim();" +
         "if(!goodTitle(title))continue;" +
         "var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
         "var cls=(' '+(a.className||'')+' '+(card.className||'')+' ').toLowerCase();" +
-        "var score=0;score+=2;if(w>=100&&h>=70)score+=1;if(/video|movie|post|thumb|poster|entry|item|card|media|film/.test(cls))score+=2;" +
+        "var score=0;score+=2;if(w>=100&&h>=70)score+=1;if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/.test(cls))score+=2;" +
         "if(title.length>=8)score+=1;if(cardText.length>=12&&cardText.length<=500)score+=1;" +
         "if(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b|views?|watch|播放/i.test(cardText))score+=1;" +
         "if(!isSupjav&&score<((img||bgMatch)?5:4))continue;" +
@@ -147,7 +147,10 @@ public final class SiteScanActivity extends Activity {
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
             @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage m){
                 android.util.Log.w("StreamHubScan",m.message()+" @ "+m.sourceId()+":"+m.lineNumber());
-                if(m.messageLevel()==android.webkit.ConsoleMessage.MessageLevel.ERROR && status!=null){
+                if(m.messageLevel()==android.webkit.ConsoleMessage.MessageLevel.ERROR && status!=null
+                    && !m.message().toLowerCase().contains("permission policy violation")
+                    && !m.message().toLowerCase().contains("accelerometer is not allowed")
+                    && !m.message().toLowerCase().contains("gyroscope is not allowed")){
                     status.setText("JavaScript situs memberi error: "+m.message());
                 }
                 return true;
