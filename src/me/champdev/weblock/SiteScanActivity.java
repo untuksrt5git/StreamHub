@@ -227,7 +227,7 @@ public final class SiteScanActivity extends Activity {
         String probe="JSON.stringify({ready:document.readyState,images:document.images?document.images.length:0,loaded:(function(){var n=0,a=document.images||[];for(var i=0;i<a.length;i++)if(a[i].complete&&a[i].naturalWidth>0)n++;return n;})(),height:Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0)})";
         web.evaluateJavascript(probe,value->{
             if(!isScanCurrent(generation))return;
-            boolean ready=value!=null&&value.contains("\\"complete\\"") ;
+            boolean ready=value!=null&&value.contains("complete");
             if(!ready&&attempt<15){
                 status.setText("Menunggu halaman stabil… pemeriksaan "+(attempt+1)+"/15 • "+(value==null?"belum ada respons":value));
                 handler.postDelayed(()->waitForPageReady(generation,manual,attempt+1),800);
