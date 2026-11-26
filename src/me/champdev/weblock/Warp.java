@@ -228,11 +228,31 @@ final class Warp {
      * WARP only when the direct try fails and it is on (a network that blocks them).
      */
     static InputStream openPublic(String url, int connectMs, int readMs) throws IOException {
+        return openPublic(url, connectMs, readMs, "");
+    }
+
+    /** Fetches hotlink-protected site artwork with the page URL and that WebView's cookies. */
+    static InputStream openPublic(String url, int connectMs, int readMs, String referer) throws IOException {
+        IOException directError;
         try {
-            return connect(url, Proxy.NO_PROXY, connectMs, readMs).getInputStream();
+            HttpURLConnection c = connect(url, Proxy.NO_PROXY, connectMs, readMs);
+            applyPageHeaders(c, referer);
+            return c.getInputStream();
         } catch (IOException direct) {
-            if (state != State.ON || port <= 0) throw direct;
-            return open(url).getInputStream();
+            directError = direct;
         }
+        if (state != State.ON || port <= 0) throw directError;
+        HttpURLConnection c = connect(url, new Proxy(Proxy.Type.HTTP, new InetSocketAddress("127.0.0.1", port)), connectMs, readMs);
+        applyPageHeaders(c, referer);
+        return c.getInputStream();
+    }
+
+    private static void applyPageHeaders(HttpURLConnection c, String referer) {
+        if (referer == null || referer.trim().isEmpty()) return;
+        c.setRequestProperty("Referer", referer);
+        try {
+            String cookie = android.webkit.CookieManager.getInstance().getCookie(referer);
+            if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
+        } catch (RuntimeException ignored) { }
     }
 }
