@@ -793,6 +793,7 @@ public final class SiteScanActivity extends Activity {
         byte[] bytes=data.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8);
         boolean oldMoved=false;
         boolean installed=false;
+        File quarantined=null;
         try{
             try(FileOutputStream out=new FileOutputStream(temp)){
                 out.write(bytes);
@@ -804,7 +805,11 @@ public final class SiteScanActivity extends Activity {
             // of an unvalidated target.
             if(target.exists()&&!isValidCatalogFile(target)){
                 if(isValidCatalogFile(backup))throw new java.io.IOException("Katalog aktif rusak; backup sehat dipertahankan untuk pemulihan");
-                throw new java.io.IOException("Katalog lama tidak valid; penggantian dibatalkan demi mencegah kehilangan data");
+                // Preserve the unreadable/legacy file under a separate name, then allow
+                // the newly validated catalog to take its place. Never delete old bytes.
+                quarantined=new File(dir,target.getName()+".corrupt."+android.os.Process.myPid()+"."+System.currentTimeMillis());
+                if(!target.renameTo(quarantined))throw new java.io.IOException("Katalog lama tidak valid dan gagal diamankan sebagai file pemulihan");
+                syncDirectory(dir);
             }
             if(target.exists()&&backup.exists()&&!backup.delete())throw new java.io.IOException("Tidak dapat membersihkan backup lama");
             if(target.exists()){
@@ -820,7 +825,16 @@ public final class SiteScanActivity extends Activity {
         }catch(Exception failure){
             // Roll back on every failure after moving the previous catalog,
             // including a failed validation after the new file was installed.
-            if(oldMoved&&isValidCatalogFile(backup)){
+            if(quarantined!=null&&quarantined.exists()){
+                boolean targetCleared=!target.exists()||target.delete();
+                if(targetCleared){
+                    if(!quarantined.renameTo(target))
+                        failure.addSuppressed(new java.io.IOException("File katalog lama yang diamankan gagal dipulihkan"));
+                    else try{syncDirectory(dir);}catch(Exception syncFailure){failure.addSuppressed(syncFailure);}
+                }else{
+                    failure.addSuppressed(new java.io.IOException("Katalog baru gagal dibersihkan; file lama tetap aman di "+quarantined.getName()));
+                }
+            }else if(oldMoved&&isValidCatalogFile(backup)){
                 File rejected=null;
                 boolean targetCleared=!target.exists()||target.delete();
                 // If deletion is refused by the filesystem, move the failed
