@@ -164,15 +164,18 @@ public final class SiteScanActivity extends Activity {
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
                 resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";
                 lastAutoScanUrl="";
-                status.setText("Membuka "+url+" — tunggu halaman tampil, lalu tekan Pindai sekarang.");
+                v.evaluateJavascript("window.__shPosterWarmupCancel=true",null);
+                status.setText("Membuka "+url+" — poster akan dimuat bertahap; pemindaian katalog tetap manual.");
             }
             @Override public void onPageCommitVisible(WebView v,String url){
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
             }
             @Override public void onPageFinished(WebView v,String url){
-                // Do not start DOM scrolling while the site is still rendering.
-                // Keep normal browsing stable; scanning is explicitly user-triggered.
-                status.setText("Halaman siap: "+url+" — telusuri katalog, lalu tekan Pindai sekarang.");
+                // Warm up lazy posters independently of the manual catalog scan.
+                // This only scrolls the current page to trigger its own lazy-image handlers,
+                // then restores the original position; it never extracts or saves catalog data.
+                startPosterWarmup(v);
+                status.setText("Halaman siap: "+url+" — poster dimuat bertahap. Tekan Pindai sekarang untuk menyimpan katalog.");
                 v.evaluateJavascript("(function(){var b=document.body;return JSON.stringify({ready:document.readyState,title:document.title,host:location.hostname,bodyText:b?(b.innerText||'').trim().length:0,html:b?b.innerHTML.length:0,frames:document.querySelectorAll('iframe').length,scripts:document.scripts.length});})()",diag->{
                     if(!finished&&diag!=null) android.util.Log.d("StreamHubScan","Page ready "+diag);
                 });
@@ -189,6 +192,34 @@ public final class SiteScanActivity extends Activity {
         root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
         web.loadUrl(siteUrl);
+    }
+
+    /**
+     * Trigger common lazy-image mechanisms as soon as a page opens, without running
+     * the indexer. The page is restored to its original scroll position afterwards.
+     * A real user gesture cancels the warm-up so it never fights manual browsing.
+     */
+    private void startPosterWarmup(WebView v){
+        String js="(function(){try{if(window.__shPosterWarmupRunning)return 'busy';"+
+            "window.__shPosterWarmupRunning=true;window.__shPosterWarmupCancel=false;"+
+            "var original=window.pageYOffset||0,steps=0,stable=0,lastHeight=0;"+
+            "function promote(){var all=document.querySelectorAll('img,source');"+
+            "for(var i=0;i<all.length;i++){var n=all[i],src=n.getAttribute('data-src')||n.getAttribute('data-lazy-src')||n.getAttribute('data-original-src')||n.getAttribute('data-original')||n.getAttribute('data-lazy')||n.getAttribute('data-image')||n.getAttribute('data-poster')||n.getAttribute('data-thumb');"+
+            "var set=n.getAttribute('data-srcset')||n.getAttribute('data-lazy-srcset')||n.getAttribute('data-original-srcset');"+
+            "if(set&&!n.getAttribute('srcset'))n.setAttribute('srcset',set);"+
+            "if(src&&n.tagName.toLowerCase()==='img'&&(!n.getAttribute('src')||/^data:image\\/(gif|svg)/i.test(n.getAttribute('src'))))n.setAttribute('src',src);"+
+            "if(n.tagName.toLowerCase()==='img'){try{n.loading='eager';}catch(e){}}"+
+            "}}"+
+            "function cancel(){window.__shPosterWarmupCancel=true;}"+
+            "window.addEventListener('touchstart',cancel,{once:true,passive:true});window.addEventListener('wheel',cancel,{once:true,passive:true});window.addEventListener('keydown',cancel,{once:true});"+
+            "function tick(){if(window.__shPosterWarmupCancel){window.__shPosterWarmupRunning=false;return;}"+
+            "promote();var vh=Math.max(240,window.innerHeight||600),height=Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0);"+
+            "window.scrollBy(0,Math.max(220,Math.floor(vh*.78)));steps++;"+
+            "if(height>0&&(window.pageYOffset+vh>=height-12)){if(height===lastHeight)stable++;else stable=1;}else stable=0;lastHeight=height;"+
+            "if((stable>=2&&steps>=2)||steps>=36){setTimeout(function(){if(!window.__shPosterWarmupCancel)window.scrollTo(0,original);window.__shPosterWarmupRunning=false;},900);return;}"+
+            "setTimeout(tick,420);}setTimeout(tick,900);return 'started';"+
+            "}catch(e){window.__shPosterWarmupRunning=false;return String(e);}})()";
+        v.evaluateJavascript(js,result->android.util.Log.d("StreamHubScan","Poster warm-up "+result));
     }
 
     private JSONObject parseJsObject(String value)throws Exception{
