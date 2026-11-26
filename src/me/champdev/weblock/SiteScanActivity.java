@@ -2,6 +2,8 @@ package me.champdev.weblock;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.graphics.Color;
 import android.view.View;
 import android.webkit.WebChromeClient;
@@ -27,6 +29,8 @@ public final class SiteScanActivity extends Activity {
     private String siteUrl, siteName, siteId;
     private SiteAdapters.Profile adapter;
     private boolean finished, scanning;
+    private final Handler handler=new Handler(Looper.getMainLooper());
+    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;if(status!=null)status.setText("Pemindaian tidak mendapat respons dari halaman. Tekan Pindai lagi atau buka kategori Videos terlebih dahulu.");} };
 
     private final String script =
         "(function(){try{" +
@@ -89,12 +93,16 @@ public final class SiteScanActivity extends Activity {
         LinearLayout bar=new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         Button scanButton=new Button(this);
-        scanButton.setText("Pindai halaman ini");
+        scanButton.setText("Pindai sekarang");
         scanButton.setOnClickListener(v->scan(true));
         bar.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
+        Button stopButton=new Button(this);
+        stopButton.setText("Stop");
+        stopButton.setOnClickListener(v->{if(web!=null){web.stopLoading();status.setText("Pemuatan dihentikan. Anda tetap bisa memindai halaman yang sudah terbuka.");}});
+        bar.addView(stopButton,new LinearLayout.LayoutParams(-2,-2));
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
-        reloadButton.setOnClickListener(v->{if(web!=null)web.reload();});
+        reloadButton.setOnClickListener(v->{if(web!=null){status.setText("Memuat ulang halaman…");web.reload();}});
         bar.addView(reloadButton,new LinearLayout.LayoutParams(-2,-2));
         root.addView(bar,new LinearLayout.LayoutParams(-1,-2));
 
@@ -116,9 +124,19 @@ public final class SiteScanActivity extends Activity {
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
         });
         web.setWebViewClient(new WebViewClient(){
+            @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
+                status.setText("Membuka "+url+" — tombol Pindai sekarang tetap bisa digunakan tanpa menunggu halaman selesai.");
+            }
+            @Override public void onPageCommitVisible(WebView v,String url){
+                status.setText("Konten halaman sudah tampil. Tekan Pindai sekarang, atau buka Videos/kategori terlebih dahulu.");
+                v.postDelayed(()->scan(false),4500);
+            }
             @Override public void onPageFinished(WebView v,String url){
-                status.setText("Halaman siap: "+url+" — menunggu katalog dirender. Anda juga bisa pindah ke halaman Videos lalu tekan Pindai.");
-                v.postDelayed(()->scan(false),8500);
+                status.setText("Halaman selesai dimuat: "+url+" — pindai sekarang atau buka Videos/kategori.");
+                v.postDelayed(()->scan(false),2500);
+            }
+            @Override public void onReceivedError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceError error){
+                if(request.isForMainFrame())status.setText("Halaman gagal dimuat: "+error.getDescription()+". Coba Stop, Muat ulang, atau pindah ke domain aktif.");
             }
         });
         root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
@@ -129,8 +147,11 @@ public final class SiteScanActivity extends Activity {
     private void scan(boolean manual){
         if(finished||web==null||scanning)return;
         scanning=true;
+        handler.removeCallbacks(scanWatchdog);
+        handler.postDelayed(scanWatchdog,10000);
         status.setText(manual?("Memindai katalog "+adapter.name+" pada halaman ini…"):("Mencoba mendeteksi katalog "+adapter.name+"…"));
         web.evaluateJavascript(script,value->{
+            handler.removeCallbacks(scanWatchdog);
             scanning=false;
             if(finished)return;
             try{
@@ -223,6 +244,7 @@ public final class SiteScanActivity extends Activity {
     }
 
     @Override protected void onDestroy(){
+        finished=true;handler.removeCallbacksAndMessages(null);
         if(web!=null){web.stopLoading();web.loadUrl("about:blank");web.destroy();web=null;}
         super.onDestroy();
     }
