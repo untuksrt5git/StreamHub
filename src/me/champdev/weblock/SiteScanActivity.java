@@ -7,8 +7,6 @@ import android.os.Looper;
 import android.graphics.Color;
 import android.view.View;
 import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.CookieManager;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
@@ -126,31 +124,13 @@ public final class SiteScanActivity extends Activity {
         root.addView(progress,new LinearLayout.LayoutParams(-1,4));
 
         web=new WebView(this);
-        WebSettings settings=web.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setLoadsImagesAutomatically(true);
-        settings.setBlockNetworkImage(false);
-        settings.setBlockNetworkLoads(false);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        // Supjav's More+ and similar catalog links may use target=_blank/window.open.
-        // Route those user-initiated navigations into this same WebView instead of silently dropping them.
-        settings.setSupportMultipleWindows(false);
-        settings.setBuiltInZoomControls(true);
-        settings.setDisplayZoomControls(false);
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-        // Match the main browser WebView appearance on Android 10+ so page images and
-        // CSS are rendered under the same darkening policy as normal browsing.
-        if(android.os.Build.VERSION.SDK_INT>=33) settings.setAlgorithmicDarkeningAllowed(true);
-        else if(android.os.Build.VERSION.SDK_INT>=29) settings.setForceDark(WebSettings.FORCE_DARK_ON);
-        // Match the main browser WebView: some catalog sites behave differently in an embedded WebView.
-        settings.setUserAgentString(settings.getUserAgentString().replace("; wv", "").replace(" Version/4.0", ""));
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
+        // Keep the scanner close to its original working WebView configuration.
+        // Only retain same-WebView handling so links such as Supjav More+ keep working.
+        web.getSettings().setJavaScriptEnabled(true);
+        web.getSettings().setDomStorageEnabled(true);
+        web.getSettings().setLoadsImagesAutomatically(true);
+        web.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+        web.getSettings().setSupportMultipleWindows(false);
         web.setBackgroundColor(Color.BLACK);
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
@@ -175,12 +155,7 @@ public final class SiteScanActivity extends Activity {
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
             }
             @Override public void onPageFinished(WebView v,String url){
-                status.setText("Halaman selesai dimuat: "+url+" — mengaktifkan poster tertunda…");
-                // Some catalog themes keep a transparent/low-res placeholder in src while
-                // the real poster is stored in data-src/data-original. Promote those URLs
-                // immediately so the scan page renders posters like the main browser.
-                handler.postDelayed(()->promotePageImages(v),500);
-                handler.postDelayed(()->promotePageImages(v),1800);
+                status.setText("Halaman selesai dimuat: "+url+" — halaman siap digunakan.");
                 v.evaluateJavascript("(function(){var b=document.body;return JSON.stringify({ready:document.readyState,title:document.title,host:location.hostname,bodyText:b?(b.innerText||'').trim().length:0,html:b?b.innerHTML.length:0,frames:document.querySelectorAll('iframe').length,scripts:document.scripts.length});})()",diag->{
                     if(finished)return;
                     try{
@@ -201,27 +176,6 @@ public final class SiteScanActivity extends Activity {
         root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(root);
         web.loadUrl(siteUrl);
-    }
-
-    private void promotePageImages(WebView target){
-        if(finished||target==null)return;
-        String js="(function(){try{var promoted=0,bgCount=0;"+
-            "function first(v){if(!v)return '';return String(v).split(',')[0].trim().split(/\\s+/)[0];}"+
-            "var nodes=document.querySelectorAll('img,source');"+
-            "for(var i=0;i<nodes.length;i++){var n=nodes[i];"+
-            "var attrs=['data-src','data-lazy-src','data-original-src','data-original','data-lazy','data-image','data-poster','data-thumb','data-url'];"+
-            "var real='';for(var a=0;a<attrs.length&&!real;a++){var val=n.getAttribute(attrs[a]);if(val&&!/^data:image\\/(gif|svg)/i.test(val))real=val;}"+
-            "var set=n.getAttribute('data-srcset')||n.getAttribute('data-lazy-srcset')||n.getAttribute('data-original-srcset');"+
-            "if(set){n.setAttribute('srcset',set);promoted++;}"+
-            "if(real&&n.tagName.toLowerCase()==='img'&&n.getAttribute('src')!==real){n.setAttribute('src',real);promoted++;}"+
-            "if(n.tagName.toLowerCase()==='img'){try{n.loading='eager';n.decoding='async';}catch(e){}}"+
-            "}"+
-            "var bg=document.querySelectorAll('[data-bg],[data-background],[data-background-image],[data-lazy-bg]');"+
-            "for(var j=0;j<bg.length;j++){var el=bg[j],u=el.getAttribute('data-bg')||el.getAttribute('data-background')||el.getAttribute('data-background-image')||el.getAttribute('data-lazy-bg');"+
-            "if(u){el.style.backgroundImage='url('+JSON.stringify(u).slice(1,-1)+')';bgCount++;}}"+
-            "return JSON.stringify({promoted:promoted,backgrounds:bgCount,images:document.images.length});"+
-            "}catch(e){return JSON.stringify({error:String(e)});}})()";
-        target.evaluateJavascript(js,null);
     }
 
     private JSONObject parseJsObject(String value)throws Exception{
