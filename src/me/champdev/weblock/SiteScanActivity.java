@@ -60,7 +60,7 @@ public final class SiteScanActivity extends Activity {
         "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(box.getBoundingClientRect().width||0);" +
         "var h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(box.getBoundingClientRect().height||0);" +
         "if(!isSupjav&&w>0&&w<100)continue;if(!isSupjav&&h>0&&h<70)continue;" +
-        "var ratio=(w>0&&h>0)?w/h:1.4;if(ratio>3.25||ratio<0.32)continue;" +
+        "var ratio=(w>0&&h>0)?w/h:1.4;if(!isSupjav&&(ratio>3.25||ratio<0.32))continue;" +
         "var card=a,cl='';" +
         "for(var up=0;up<5&&card&&card.parentElement;up++){cl=(' '+(card.className||'')+' '+(card.parentElement.className||'')+' ').toLowerCase();" +
         "if(/video|movie|post|thumb|poster|entry|item|card|media|film/.test(cl)){card=card.parentElement;break;}card=card.parentElement;}" +
