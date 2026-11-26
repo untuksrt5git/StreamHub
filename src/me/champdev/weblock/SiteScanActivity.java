@@ -40,7 +40,8 @@ public final class SiteScanActivity extends Activity {
         "function txt(n){return (n&&n.textContent?n.textContent:'').replace(/\\s+/g,' ').trim();}" +
         "function goodTitle(t){t=(t||'').replace(/\\s+/g,' ').trim();return t.length>=5&&t.length<=180&&!/^(home|watch|play|video|videos|ads?|advertisement|next|previous|more|menu|login|register)$/i.test(t)&&!bad.test(t);}" +
         "var out=[],seen={};" +
-        "var anchors=document.querySelectorAll('a[href]');" +
+        "var isSupjav=/supjav\\.com$/i.test(location.hostname);" +
+        "var anchors=isSupjav?document.querySelectorAll('.posts.clearfix>.post>a.img[title],.posts>.post>a.img[title],.posts .post h3 a[rel=bookmark][itemprop=url],.posts .post h3 a[rel=bookmark],.post a.img[title]'):document.querySelectorAll('a[href]');" +
         "for(var i=0;i<anchors.length&&out.length<180;i++){" +
         "var a=anchors[i],img=a.querySelector('img');" +
         "if(!img){var p0=a.parentElement; if(p0&&p0.querySelectorAll('img').length===1)img=p0.querySelector('img');}" +
@@ -48,7 +49,7 @@ public final class SiteScanActivity extends Activity {
         "var styleText=((a.getAttribute('style')||'')+' '+(a.getAttribute('data-bg')||'')+' '+(a.getAttribute('data-background')||' ')+(box&&box.getAttribute?(' '+(box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):'')),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
         "var clsHint=(' '+(a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(box&&box.className||'')+' ').toLowerCase();" +
          // A catalog entry may be a text-only link or use a lazy/background thumbnail.
-         "if(!img&&!bgMatch&&!/video|movie|post|thumb|poster|entry|item|card|media|film/.test(clsHint))continue;" +
+         "if(!isSupjav&&!img&&!bgMatch&&!/video|movie|post|thumb|poster|entry|item|card|media|film/.test(clsHint))continue;" +
         "var href=abs(a.getAttribute('href'));if(!href)continue;" +
         "var hu;try{hu=new URL(href);}catch(e){continue;}" +
         "if(!/^https?:$/.test(hu.protocol)||hu.hostname!==location.hostname||href.split('#')[0]===location.href.split('#')[0])continue;" +
@@ -58,7 +59,7 @@ public final class SiteScanActivity extends Activity {
          "if(poster&&bad.test(poster))poster='';" +
         "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(box.getBoundingClientRect().width||0);" +
         "var h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(box.getBoundingClientRect().height||0);" +
-        "if(w>0&&w<100)continue;if(h>0&&h<70)continue;" +
+        "if(!isSupjav&&w>0&&w<100)continue;if(!isSupjav&&h>0&&h<70)continue;" +
         "var ratio=(w>0&&h>0)?w/h:1.4;if(ratio>3.25||ratio<0.32)continue;" +
         "var card=a,cl='';" +
         "for(var up=0;up<5&&card&&card.parentElement;up++){cl=(' '+(card.className||'')+' '+(card.parentElement.className||'')+' ').toLowerCase();" +
@@ -72,13 +73,13 @@ public final class SiteScanActivity extends Activity {
         "var score=0;score+=2;if(w>=100&&h>=70)score+=1;if(/video|movie|post|thumb|poster|entry|item|card|media|film/.test(cls))score+=2;" +
         "if(title.length>=8)score+=1;if(cardText.length>=12&&cardText.length<=500)score+=1;" +
         "if(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b|views?|watch|播放/i.test(cardText))score+=1;" +
-        "if(score<((img||bgMatch)?5:4))continue;" +
+        "if(!isSupjav&&score<((img||bgMatch)?5:4))continue;" +
         "var key=href.split('#')[0];if(seen[key])continue;seen[key]=1;" +
         "var frame=card.querySelector('iframe[src]');var embed=frame?abs(frame.getAttribute('src')):href;" +
         "var host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
         "out.push({title:title,poster:poster,pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
         "}" +
-        "return JSON.stringify({page:location.href,title:document.title,items:out,images:anchors.length});" +
+        "return JSON.stringify({page:location.href,title:document.title,items:out,images:anchors.length,adapter:isSupjav?'supjav':'generic'});" +
         "}catch(e){return JSON.stringify({error:String(e),items:[]});}})()";
 
     @Override public void onCreate(Bundle b) {
@@ -174,7 +175,7 @@ public final class SiteScanActivity extends Activity {
                     Toast.makeText(this,"Katalog: "+items.length()+" item ditemukan",Toast.LENGTH_LONG).show();
                 }else{
                     String msg=result.optString("error","");
-                    status.setText("Belum ada kartu video yang cocok pada halaman ini ("+result.optInt("images",0)+" tautan diperiksa). Buka menu Videos atau kategori di website, tunggu sampai thumbnail tampil, lalu tekan Pindai halaman ini. "+(msg.isEmpty()?"":msg));
+                    status.setText("Belum ada kartu video yang cocok pada halaman ini ("+result.optInt("images",0)+" elemen kandidat diperiksa; adapter "+result.optString("adapter","generic")+"). Buka halaman Videos/kategori, tunggu konten tampil, lalu pindai lagi. "+(msg.isEmpty()?"":msg));
                     if(manual)Toast.makeText(this,"Belum menemukan kartu katalog pada halaman ini",Toast.LENGTH_LONG).show();
                 }
             }catch(Exception e){
