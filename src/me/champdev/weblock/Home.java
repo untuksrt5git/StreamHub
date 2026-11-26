@@ -2890,8 +2890,7 @@ public class Home extends Activity {
         int columns = Math.max(2, Math.min(App.tv ? 6 : 5, usableWidth / minCardWidth));
         // Match Movie Series posters: portrait 2:3 (posterCard uses width x width*3/2).
         // Catalog cards fill their grid cell, so derive the height from that cell's available width.
-        int indexedPosterWidth = Math.max(1, usableWidth / columns - 17);
-        int indexedPosterHeight = indexedPosterWidth * 3 / 2;
+        int indexedPosterHeight = posterW() * 3 / 2;
 
         if (total == 0) {
             col.addView(note("Tidak ada video untuk filter ini. Pilih kelompok atau jenis lain."));
@@ -3028,11 +3027,12 @@ public class Home extends Activity {
         int imageHeight = posterHeight;
         ImageView image = new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        frame.addView(image, new FrameLayout.LayoutParams(-1, dp(imageHeight)));
+        FrameLayout.LayoutParams posterLp = new FrameLayout.LayoutParams(dp(posterW()), dp(imageHeight), Gravity.CENTER);
+        frame.addView(image, posterLp);
         TextView placeholder = text("▶", 28, MUTED, true);
         placeholder.setGravity(Gravity.CENTER);
         placeholder.setBackground(rounded(CARD_HI, dp(9)));
-        frame.addView(placeholder, new FrameLayout.LayoutParams(-1, dp(imageHeight)));
+        frame.addView(placeholder, new FrameLayout.LayoutParams(dp(posterW()), dp(imageHeight), Gravity.CENTER));
         card.addView(frame);
         if (poster.startsWith("http")) loadImage(image, poster, placeholder, App.tv ? 480 : 240, posterReferer.isEmpty() ? pageUrl : posterReferer);
         TextView name = text(title, sp(14, 12), TEXT, true);
