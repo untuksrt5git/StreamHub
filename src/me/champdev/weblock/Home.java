@@ -3365,7 +3365,7 @@ public class Home extends Activity {
 
     static Bitmap fetch(String url, int min) {
         Long bad = failed.get(url);
-        if (bad != null && System.currentTimeMillis() - bad < 10 * 60000) return null;   // a missing picture is not asked for on every redraw
+        if (bad != null && System.currentTimeMillis() - bad < 90 * 1000) return null;   // short cooldown: transient host failures can recover quickly
         try {
             byte[] sha = MessageDigest.getInstance("SHA-1").digest(url.getBytes("UTF-8"));
             StringBuilder name = new StringBuilder();
@@ -3376,10 +3376,25 @@ public class Home extends Activity {
             File f = new File(dir, name.toString());
             if (!f.exists()) {
                 File tmp = new File(dir, name + "." + Thread.currentThread().getId() + ".tmp");   // two sizes of one picture can load at once
-                try (InputStream in = Warp.openPublic(url, 6000, 20000); FileOutputStream out = new FileOutputStream(tmp)) {
-                    byte[] buf = new byte[16384];
-                    for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                Exception downloadError = null;
+                for (int attempt = 0; attempt < 2; attempt++) {
+                    try (InputStream in = Warp.openPublic(url, 7000, 22000); FileOutputStream out = new FileOutputStream(tmp)) {
+                        byte[] buf = new byte[16384];
+                        for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                        downloadError = null;
+                        break;
+                    } catch (Exception e) {
+                        downloadError = e;
+                        tmp.delete();
+                        if (attempt == 0) {
+                            try { Thread.sleep(450); } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                                throw new IOException("Image retry interrupted", interrupted);
+                            }
+                        }
+                    }
                 }
+                if (downloadError != null) throw downloadError;
                 if (!tmp.renameTo(f)) return null;
             } else if (System.currentTimeMillis() - f.lastModified() > 24L * 3600 * 1000) f.setLastModified(System.currentTimeMillis());
             BitmapFactory.Options o = new BitmapFactory.Options();
