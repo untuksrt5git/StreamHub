@@ -136,7 +136,9 @@ public final class SiteScanActivity extends Activity {
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setSupportMultipleWindows(true);
+        // Supjav's More+ and similar catalog links may use target=_blank/window.open.
+        // Route those user-initiated navigations into this same WebView instead of silently dropping them.
+        settings.setSupportMultipleWindows(false);
         settings.setBuiltInZoomControls(true);
         settings.setDisplayZoomControls(false);
         settings.setUseWideViewPort(true);
