@@ -793,7 +793,7 @@ public final class SiteScanActivity extends Activity {
                 if(isValidCatalogFile(backup))throw new java.io.IOException("Katalog aktif rusak; backup sehat dipertahankan untuk pemulihan");
                 throw new java.io.IOException("Katalog lama tidak valid; penggantian dibatalkan demi mencegah kehilangan data");
             }
-            if(backup.exists()&&!backup.delete())throw new java.io.IOException("Tidak dapat membersihkan backup lama");
+            if(target.exists()&&backup.exists()&&!backup.delete())throw new java.io.IOException("Tidak dapat membersihkan backup lama");
             if(target.exists()){
                 if(!target.renameTo(backup))throw new java.io.IOException("Tidak dapat memindahkan katalog lama ke backup");
                 oldMoved=true;
@@ -827,7 +827,6 @@ public final class SiteScanActivity extends Activity {
     /** Best-effort persistence of rename metadata on Android/Linux. */
     private void syncDirectory(File dir)throws Exception{
         if(android.os.Build.VERSION.SDK_INT>=21){
-            java.io.FileDescriptor fd=null;
             try{
                 java.io.FileDescriptor opened=android.system.Os.open(dir.getAbsolutePath(),android.system.OsConstants.O_RDONLY,0);
                 try{android.system.Os.fsync(opened);}finally{android.system.Os.close(opened);}
