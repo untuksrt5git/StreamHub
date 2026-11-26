@@ -342,6 +342,11 @@ public class Home extends Activity {
     }
 
     boolean refreshing;
+    // The user's indexed-video catalog keeps its filters while Home is redrawn.
+    String indexedOriginFilter = "";
+    String indexedCategoryFilter = "";
+    int indexedCatalogPage = 0;
+    int indexedCatalogPageSize = 20;
 
     /** Loads the open tab again: catalog lists from the network, and the site lists (Sports, Home) or the channels (IPTV). */
     void refresh() {
@@ -2730,20 +2735,19 @@ public class Home extends Activity {
     }
 
     /** Opens the local JSON index as a browsable list of pages found on the user's site. */
-    /** Catalog built from the user's own locally indexed websites, not from the inherited public catalog. */
+    /** Catalog built from locally indexed websites. Only one filtered page is attached at a time. */
     void indexedCatalogTab() {
         col.addView(heading("KATALOG VIDEO"));
-        TextView intro = text("Kartu dikelompokkan menurut domain pemutar yang benar-benar ditemukan di iframe, bukan nama website induk yang menanamkannya.", sp(14, 12), MUTED, false);
-        intro.setPadding(0, 0, 0, dp(12));
+        TextView intro = text("Pilih kelompok sumber atau jenis video. Katalog dibagi menjadi beberapa halaman agar ratusan kartu tidak dimuat sekaligus.", sp(14, 12), MUTED, false);
+        intro.setPadding(0, 0, 0, dp(10));
         col.addView(intro);
+
         List<Sites.Site> sites = Sites.favorites();
         if (sites.isEmpty()) {
             col.addView(note("Belum ada website. Tambahkan website dari tab Beranda."));
             return;
         }
 
-        // A page on OMG can embed a player hosted by Bingr (or another provider). Attribute each card to
-        // the iframe's own host, while retaining the parent page URL only as fallback metadata.
         Map<String, List<org.json.JSONObject>> byOrigin = new java.util.LinkedHashMap<>();
         for (Sites.Site site : sites) {
             String fileName = site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile;
@@ -2766,36 +2770,121 @@ public class Home extends Activity {
             } catch (Exception ignored) { }
         }
 
-        int total = 0;
+        List<String> origins = new ArrayList<>(byOrigin.keySet());
+        List<String> categories = new ArrayList<>();
+        categories.add("Semua jenis");
+        for (List<org.json.JSONObject> group : byOrigin.values()) for (org.json.JSONObject v : group) {
+            String c = v.optString("category", "video");
+            if (c.isEmpty()) c = "video";
+            if (!categories.contains(c)) categories.add(c);
+        }
+        if (!indexedOriginFilter.isEmpty() && !byOrigin.containsKey(indexedOriginFilter)) indexedOriginFilter = "";
+        if (!categories.contains(indexedCategoryFilter) && !indexedCategoryFilter.isEmpty()) indexedCategoryFilter = "";
+
+        LinearLayout filters = new LinearLayout(this);
+        filters.setOrientation(LinearLayout.HORIZONTAL);
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        filters.setPadding(0, 0, 0, dp(8));
+        TextView groupButton = text("Kelompok: " + (indexedOriginFilter.isEmpty() ? "Semua" : indexedOriginFilter) + " ▾", sp(13, 11), TEXT, true);
+        groupButton.setPadding(dp(10), dp(10), dp(10), dp(10));
+        groupButton.setBackground(rounded(CARD_HI, dp(9)));
+        groupButton.setOnClickListener(v -> {
+            List<String> choices = new ArrayList<>(); choices.add("Semua kelompok"); choices.addAll(origins);
+            new AlertDialog.Builder(this).setTitle("Pilih kelompok sumber").setItems(choices.toArray(new String[0]), (d, which) -> {
+                indexedOriginFilter = which == 0 ? "" : origins.get(which - 1); indexedCatalogPage = 0; build();
+            }).show();
+        });
+        filters.addView(groupButton, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView typeButton = text("Jenis: " + (indexedCategoryFilter.isEmpty() ? "Semua" : indexedCategoryFilter) + " ▾", sp(13, 11), TEXT, true);
+        typeButton.setPadding(dp(10), dp(10), dp(10), dp(10));
+        typeButton.setBackground(rounded(CARD_HI, dp(9)));
+        LinearLayout.LayoutParams typeLp = new LinearLayout.LayoutParams(0, -2, 1);
+        typeLp.leftMargin = dp(6);
+        typeButton.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("Pilih jenis video")
+            .setItems(categories.toArray(new String[0]), (d, which) -> {
+                indexedCategoryFilter = which == 0 ? "" : categories.get(which); indexedCatalogPage = 0; build();
+            }).show());
+        filters.addView(typeButton, typeLp);
+        col.addView(filters);
+
+        List<org.json.JSONObject> filtered = new ArrayList<>();
         for (Map.Entry<String, List<org.json.JSONObject>> group : byOrigin.entrySet()) {
-            List<org.json.JSONObject> videos = group.getValue();
-            col.addView(heading(group.getKey(), String.valueOf(videos.size())));
-            LinearLayout row = null;
-            int inRow = 0;
-            int columns = App.tv ? 4 : 2;
-            for (org.json.JSONObject video : videos) {
-                String title = video.optString("title", "Video");
-                String poster = video.optString("poster", "");
-                String embedUrl = video.optString("embedUrl", "");
-                String pageUrl = video.optString("pageUrl", "");
-                String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
-                if (playUrl.isEmpty()) continue;
-                if (row == null || inRow >= columns) {
-                    row = new LinearLayout(this);
-                    row.setOrientation(LinearLayout.HORIZONTAL);
-                    row.setGravity(Gravity.TOP);
-                    col.addView(row);
-                    inRow = 0;
-                }
-                row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")), new LinearLayout.LayoutParams(0, -2, 1));
-                inRow++;
-                total++;
-            }
-            if (row != null && inRow < columns) {
-                while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+            if (!indexedOriginFilter.isEmpty() && !indexedOriginFilter.equals(group.getKey())) continue;
+            for (org.json.JSONObject video : group.getValue()) {
+                String category = video.optString("category", "video");
+                if (!indexedCategoryFilter.isEmpty() && !indexedCategoryFilter.equals(category)) continue;
+                filtered.add(video);
             }
         }
-        if (total == 0) col.addView(note("Belum ditemukan pasangan halaman video dan embed. Buka website lalu pilih Pindai ulang agar indeks video terbaru dibuat. Jika website memuat daftar lewat JavaScript, indeks HTML statis mungkin tidak dapat mengambil poster atau judulnya."));
+        int total = filtered.size();
+        int pages = Math.max(1, (total + indexedCatalogPageSize - 1) / indexedCatalogPageSize);
+        indexedCatalogPage = Math.max(0, Math.min(indexedCatalogPage, pages - 1));
+
+        LinearLayout pageTools = new LinearLayout(this);
+        pageTools.setOrientation(LinearLayout.HORIZONTAL);
+        pageTools.setGravity(Gravity.CENTER_VERTICAL);
+        TextView sizeButton = text("Per halaman: " + indexedCatalogPageSize + " ▾", sp(12, 10), MUTED, true);
+        sizeButton.setPadding(dp(8), dp(8), dp(8), dp(8));
+        sizeButton.setOnClickListener(v -> {
+            String[] sizes = {"12", "20", "30", "40"};
+            new AlertDialog.Builder(this).setTitle("Jumlah video per halaman").setItems(sizes, (d, which) -> {
+                indexedCatalogPageSize = Integer.parseInt(sizes[which]); indexedCatalogPage = 0; build();
+            }).show();
+        });
+        pageTools.addView(sizeButton, new LinearLayout.LayoutParams(0, -2, 1));
+        pageTools.addView(text(total + " video • " + pages + " halaman", sp(12, 10), MUTED, false));
+        col.addView(pageTools);
+
+        if (total == 0) {
+            col.addView(note("Tidak ada video untuk filter ini. Pilih kelompok atau jenis lain."));
+            return;
+        }
+
+        int from = indexedCatalogPage * indexedCatalogPageSize;
+        int to = Math.min(total, from + indexedCatalogPageSize);
+        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density);
+        int usableWidth = Math.max(240, screenWidthDp - 2 * side);
+        int minCardWidth = App.tv ? 190 : (getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 150 : 142);
+        int columns = Math.max(2, Math.min(App.tv ? 6 : 5, usableWidth / minCardWidth));
+        LinearLayout row = null;
+        int inRow = 0;
+        for (int i = from; i < to; i++) {
+            org.json.JSONObject video = filtered.get(i);
+            String title = video.optString("title", "Video");
+            String poster = video.optString("poster", "");
+            String embedUrl = video.optString("embedUrl", "");
+            String pageUrl = video.optString("pageUrl", "");
+            String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
+            if (playUrl.isEmpty()) continue;
+            if (row == null || inRow >= columns) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.TOP);
+                col.addView(row);
+                inRow = 0;
+            }
+            row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, video.optString("brand", ""), video.optString("logo", ""), video.optString("description", "")), new LinearLayout.LayoutParams(0, -2, 1));
+            inRow++;
+        }
+        if (row != null && inRow < columns) while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+
+        LinearLayout pager = new LinearLayout(this);
+        pager.setGravity(Gravity.CENTER);
+        pager.setPadding(0, dp(12), 0, dp(20));
+        TextView previous = text("‹ Sebelumnya", sp(14, 12), indexedCatalogPage == 0 ? MUTED : TEXT, true);
+        previous.setPadding(dp(16), dp(10), dp(16), dp(10));
+        previous.setBackground(rounded(CARD_HI, dp(9)));
+        previous.setOnClickListener(v -> { if (indexedCatalogPage > 0) { indexedCatalogPage--; build(); } });
+        pager.addView(previous);
+        TextView pageLabel = text((indexedCatalogPage + 1) + " / " + pages, sp(13, 11), MUTED, true);
+        pageLabel.setPadding(dp(16), dp(10), dp(16), dp(10));
+        pager.addView(pageLabel);
+        TextView next = text("Berikutnya ›", sp(14, 12), indexedCatalogPage + 1 >= pages ? MUTED : TEXT, true);
+        next.setPadding(dp(16), dp(10), dp(16), dp(10));
+        next.setBackground(rounded(CARD_HI, dp(9)));
+        next.setOnClickListener(v -> { if (indexedCatalogPage + 1 < pages) { indexedCatalogPage++; build(); } });
+        pager.addView(next);
+        col.addView(pager);
     }
 
     View indexedVideoCard(String title, String poster, String playUrl, String pageUrl, String brand, String logo, String description) {
