@@ -108,7 +108,7 @@ public final class SiteScanActivity extends Activity {
         bar.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
         Button stopButton=new Button(this);
         stopButton.setText("Stop");
-        stopButton.setOnClickListener(v->{if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){web.stopLoading();status.setText("Pemuatan/pemindaian dihentikan. Halaman yang sudah terbuka tetap bisa dipindai lagi.");}});
+        stopButton.setOnClickListener(v->{if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Pemindaian dihentikan. Pemuatan halaman dan gambar tetap berjalan; tekan Pindai sekarang jika sudah siap.");}});
         bar.addView(stopButton,new LinearLayout.LayoutParams(-2,-2));
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
@@ -144,6 +144,10 @@ public final class SiteScanActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        // Match the main browser WebView appearance on Android 10+ so page images and
+        // CSS are rendered under the same darkening policy as normal browsing.
+        if(android.os.Build.VERSION.SDK_INT>=33) settings.setAlgorithmicDarkeningAllowed(true);
+        else if(android.os.Build.VERSION.SDK_INT>=29) settings.setForceDark(WebSettings.FORCE_DARK_ON);
         // Match the main browser WebView: some catalog sites behave differently in an embedded WebView.
         settings.setUserAgentString(settings.getUserAgentString().replace("; wv", "").replace(" Version/4.0", ""));
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
