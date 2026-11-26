@@ -58,7 +58,9 @@ public final class SiteScanActivity extends Activity {
         "var candidate=null,fallback=null,cur=a;" +
         "for(var up=0;up<8&&cur&&cur.parentElement;up++){var p=cur.parentElement,tag=String(p.tagName||'').toLowerCase(),ac=p.querySelectorAll('a[href]').length,imc=p.querySelectorAll('img').length,hasHead=!!p.querySelector('h1,h2,h3,h4,.title,.name,[class*=title],[itemprop=name]');" +
         "if(!fallback&&ac<=6&&(imc>0||hasHead))fallback=p;" +
-        "if(cardClass(p)||tag==='article'){candidate=p;if(hasHead||ac<=6)break;}cur=p;}" +
+        "var strongCard=/(^|[\\s_-])(post|video|movie|item|entry|film|clip|card|media)([\\s_-]|$)/i.test(' '+String(p.className||'')+' ');" +
+        "if(tag==='article'||strongCard){candidate=p;if(hasHead)break;}else if(cardClass(p)&&!candidate)candidate=p;" +
+        "if(hasHead&&ac<=6){candidate=p;break;}cur=p;}" +
         "var card=candidate||fallback||a.parentElement||a;cardCandidates++;" +
         "var img=a.querySelector('img')||card.querySelector('img'),poster=imageUrl(img)||bgUrl(a)||bgUrl(card);" +
         "if(!poster){var bgNodes=card.querySelectorAll('[style],[data-bg],[data-background]');for(var bi=0;bi<bgNodes.length&&!poster;bi++)poster=bgUrl(bgNodes[bi]);}" +
@@ -198,7 +200,6 @@ public final class SiteScanActivity extends Activity {
         scanning=true;
         final int generation=++scanGeneration;
         scanPasses=0;scanStableBottom=0;scanLastHeight=-1;
-        resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";
         handler.removeCallbacks(scanWatchdog);
         handler.postDelayed(scanWatchdog,45000);
         status.setText("Menyiapkan pemindaian "+adapter.name+" — memicu pemuatan gambar dan konten bertahap…");
