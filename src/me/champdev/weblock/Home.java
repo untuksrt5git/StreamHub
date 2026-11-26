@@ -2943,24 +2943,24 @@ public class Home extends Activity {
             new AlertDialog.Builder(this).setTitle(title)
                 .setItems(new String[]{"Putar di StreamHub (halaman video)", "Buka embed/player sumber", "Coba player native"},
                     (dialog, choice) -> {
-                        String host = Uri.parse(sourcePage).getHost();
-                        if (host == null || host.isEmpty()) host = title;
+                        String playbackHost = Uri.parse(sourcePage).getHost();
+                        if (playbackHost == null || playbackHost.isEmpty()) playbackHost = title;
                         if (choice == 0) {
                             // Start at the actual video detail page so WebActivity can run the site's JS player
                             // and its stream sniffer; do not mistake a listing iframe for a playable media URL.
-                            startActivity(WebActivity.open(this, host, sourcePage, sourcePage));
+                            startActivity(WebActivity.open(this, playbackHost, sourcePage, sourcePage));
                         } else if (choice == 1) {
-                            startActivity(WebActivity.open(this, host, sourcePage, embedPage));
+                            startActivity(WebActivity.open(this, playbackHost, sourcePage, embedPage));
                         } else if (isDirectMediaUrl(embedPage)) {
                             Map<String, String> headers = new HashMap<>();
                             headers.put("Referer", sourcePage);
                             String lower = embedPage.toLowerCase(java.util.Locale.ROOT);
                             boolean dash = lower.matches(".*\\.mpd(?:[?#].*)?$");
                             startActivity(PlayerActivity.open(this, embedPage, dash, headers, new ArrayList<>(), title)
-                                .putExtra("mime", mediaMime(embedPage)).putExtra("pageTitle", title).putExtra("pageUrl", sourcePage).putExtra("site", host).putExtra("siteUrl", sourcePage));
+                                .putExtra("mime", mediaMime(embedPage)).putExtra("pageTitle", title).putExtra("pageUrl", sourcePage).putExtra("site", playbackHost).putExtra("siteUrl", sourcePage));
                         } else {
                             Toast.makeText(this, "URL katalog ini masih berupa halaman HTML/iframe, bukan URL video langsung. StreamHub akan membuka halaman sumber; gunakan tombol Player di halaman setelah stream terdeteksi.", Toast.LENGTH_LONG).show();
-                            startActivity(WebActivity.open(this, host, sourcePage, sourcePage));
+                            startActivity(WebActivity.open(this, playbackHost, sourcePage, sourcePage));
                         }
                     }).show();
         });
