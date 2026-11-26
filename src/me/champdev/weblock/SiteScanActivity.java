@@ -57,7 +57,7 @@ public final class SiteScanActivity extends Activity {
         "for(var up=0;up<5&&card&&card.parentElement;up++){cl=(' '+(card.className||'')+' '+(card.parentElement.className||'')+' ').toLowerCase();" +
         "if(/video|movie|post|thumb|poster|entry|item|card|media|film/.test(cl)){card=card.parentElement;break;}card=card.parentElement;}" +
         "var heading=card.querySelector('h1,h2,h3,h4,.title,.name,[class*=title]');" +
-        "var title=(a.getAttribute('title')||a.getAttribute('aria-label')||img.getAttribute('alt')||txt(heading)||txt(a)||txt(card)).replace(/\\s+/g,' ').trim();" +
+        "var title=(a.getAttribute('title')||a.getAttribute('aria-label')||(img?img.getAttribute('alt'):'')||txt(heading)||txt(a)||txt(card)).replace(/\\s+/g,' ').trim();" +
         "title=title.replace(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b/g,'').replace(/\\s+/g,' ').trim();" +
         "if(!goodTitle(title))continue;" +
         "var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
