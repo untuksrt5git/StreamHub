@@ -3455,6 +3455,13 @@ public class Home extends Activity {
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(f.getPath(), o);
+            if (o.outWidth <= 0 || o.outHeight <= 0) {
+                android.util.Log.w("StreamHubPoster", "Invalid image bounds; mime=" + o.outMimeType
+                    + ", bytes=" + f.length() + ", host=" + android.net.Uri.parse(url).getHost());
+            } else {
+                android.util.Log.d("StreamHubPoster", "Image bounds=" + o.outWidth + "x" + o.outHeight
+                    + ", mime=" + o.outMimeType + ", host=" + android.net.Uri.parse(url).getHost());
+            }
             o.inSampleSize = 1;
             while (o.outWidth / (o.inSampleSize * 2) >= min) o.inSampleSize *= 2;
             o.inJustDecodeBounds = false;
@@ -3465,9 +3472,17 @@ public class Home extends Activity {
             if (min <= 400 && "image/jpeg".equals(o.outMimeType)) o.inPreferredConfig = Bitmap.Config.RGB_565;
             Bitmap b = BitmapFactory.decodeFile(f.getPath(), o);
             if (b != null) b.setDensity(Bitmap.DENSITY_NONE);   // the scaling above was ours, not a screen density
-            if (b == null) { f.delete(); failed.put(url, System.currentTimeMillis()); }   // not a picture (an error page): don't keep it
+            if (b == null) {
+                android.util.Log.w("StreamHubPoster", "Bitmap decode failed; mime=" + o.outMimeType
+                    + ", bounds=" + o.outWidth + "x" + o.outHeight + ", bytes=" + f.length()
+                    + ", host=" + android.net.Uri.parse(url).getHost());
+                f.delete();
+                failed.put(url, System.currentTimeMillis());
+            }
             return b;
         } catch (Exception e) {
+            android.util.Log.w("StreamHubPoster", "Poster fetch failed; host=" + android.net.Uri.parse(url).getHost()
+                + ", reason=" + e.getClass().getSimpleName() + ": " + e.getMessage());
             failed.put(url, System.currentTimeMillis());
             return null;
         } catch (OutOfMemoryError e) {
