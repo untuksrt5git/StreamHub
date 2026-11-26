@@ -31,13 +31,21 @@ public final class SiteScanActivity extends Activity {
     private TextView status;
     private String siteUrl, siteName, siteId, indexFile, siteRootUrl;
     private SiteAdapters.Profile adapter;
-    private boolean finished, scanning, autoCrawl;
+    private boolean finished, scanning, autoCrawl, periodicEnabled;
+    private static final long PERIODIC_SCAN_MS=30L*60L*1000L;
     private final ArrayList<String> autoQueue=new ArrayList<>();
     private final LinkedHashSet<String> autoQueued=new LinkedHashSet<>();
     private final LinkedHashSet<String> autoVisited=new LinkedHashSet<>();
-    private String autoCurrentUrl="";
+    private final java.util.LinkedHashMap<String,Integer> autoCategoryPageCounts=new java.util.LinkedHashMap<>();
+    private final java.util.LinkedHashMap<String,String> autoPageCategories=new java.util.LinkedHashMap<>();
+    private String autoCurrentUrl="", autoCurrentCategory="";
     private int autoCompleted=0, autoDiscovered=0;
     private static final int AUTO_MAX_PAGES=120;
+    private final Runnable periodicScan=new Runnable(){@Override public void run(){
+        if(finished||!periodicEnabled)return;
+        if(!autoCrawl&&!scanning)beginAutoCrawl();
+        handler.postDelayed(this,PERIODIC_SCAN_MS);
+    }};
     private int scanGeneration, scanPasses, scanStableBottom, scanLastHeight=-1;
     private int resourceHttpErrors, resourceNetworkErrors;
     private int domNullRetries;
@@ -111,7 +119,7 @@ public final class SiteScanActivity extends Activity {
         LinearLayout bar=new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         Button autoButton=new Button(this);
-        autoButton.setText("Pindai otomatis semua");
+        autoButton.setText("Mulai scan rutin (30 mnt)");
         autoButton.setOnClickListener(v->startAutoCrawl());
         bar.addView(autoButton,new LinearLayout.LayoutParams(0,-2,1));
         Button scanButton=new Button(this);
@@ -120,7 +128,7 @@ public final class SiteScanActivity extends Activity {
         bar.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
         Button stopButton=new Button(this);
         stopButton.setText("Stop");
-        stopButton.setOnClickListener(v->{autoCrawl=false;autoQueue.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Pemindaian dihentikan. Hasil halaman yang sudah selesai tetap tersimpan.");}});
+        stopButton.setOnClickListener(v->{periodicEnabled=false;handler.removeCallbacks(periodicScan);autoCrawl=false;autoQueue.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Pemindaian dihentikan. Hasil halaman yang sudah selesai tetap tersimpan.");}});
         bar.addView(stopButton,new LinearLayout.LayoutParams(-2,-2));
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
@@ -449,10 +457,19 @@ public final class SiteScanActivity extends Activity {
 
     /** Start a same-site crawl of category and pagination links exposed by the current page. */
     private void startAutoCrawl(){
-        if(finished||web==null||scanning)return;
+        if(finished||web==null||scanning||autoCrawl)return;
+        periodicEnabled=true;
+        handler.removeCallbacks(periodicScan);
+        beginAutoCrawl();
+        handler.postDelayed(periodicScan,PERIODIC_SCAN_MS);
+    }
+
+    private void beginAutoCrawl(){
+        if(finished||web==null||scanning||autoCrawl)return;
         autoCrawl=true;autoQueue.clear();autoQueued.clear();autoVisited.clear();
+        autoCategoryPageCounts.clear();autoPageCategories.clear();
         autoCompleted=0;autoDiscovered=0;
-        enqueueAuto(siteUrl);
+        enqueueAuto(siteUrl,autoKey(siteRootUrl));
         autoNextPage();
     }
 
@@ -464,14 +481,18 @@ public final class SiteScanActivity extends Activity {
         return value;
     }
 
-    private void enqueueAuto(String address){
-        String value=autoKey(address);
-        if(value.isEmpty()||autoQueued.contains(value)||autoVisited.contains(value)||autoQueue.size()+autoCompleted>=AUTO_MAX_PAGES)return;
+    private void enqueueAuto(String address,String categoryKey){
+        String value=autoKey(address),category=autoKey(categoryKey);
+        if(value.isEmpty()||category.isEmpty()||autoQueued.contains(value)||autoVisited.contains(value)||autoQueue.size()+autoCompleted>=AUTO_MAX_PAGES)return;
         try{
             android.net.Uri u=android.net.Uri.parse(value);
             if(!("http".equalsIgnoreCase(u.getScheme())||"https".equalsIgnoreCase(u.getScheme())))return;
             String root=SiteAdapters.host(siteRootUrl),host=SiteAdapters.host(value);
             if(root.isEmpty()||host.isEmpty()||!(host.equals(root)||host.endsWith("."+root)))return;
+            int count=autoCategoryPageCounts.containsKey(category)?autoCategoryPageCounts.get(category):0;
+            if(count>=10)return;
+            autoCategoryPageCounts.put(category,count+1);
+            autoPageCategories.put(value,category);
             autoQueued.add(value);autoQueue.add(value);autoDiscovered++;
         }catch(Exception ignored){}
     }
@@ -480,14 +501,15 @@ public final class SiteScanActivity extends Activity {
         if(!autoCrawl||finished||web==null)return;
         if(autoCompleted>=AUTO_MAX_PAGES||autoQueue.isEmpty()){
             autoCrawl=false;
-            status.setText("Pemindaian otomatis selesai. "+autoCompleted+" halaman diproses, "+autoDiscovered+" URL ditemukan. Katalog sudah digabung dan duplikat dihapus."+
-                (autoCompleted>=AUTO_MAX_PAGES?" Batas aman "+AUTO_MAX_PAGES+" halaman tercapai; jalankan lagi untuk melanjutkan penelusuran.":""));
+            status.setText("Putaran scraping selesai. "+autoCompleted+" halaman diproses dari halaman utama dan kategori (maksimal 10 halaman per kategori). "+autoDiscovered+" URL ditemukan. Katalog diperbarui; scan rutin "+(periodicEnabled?"aktif setiap 30 menit selama layar ini terbuka.":"nonaktif.")+
+                (autoCompleted>=AUTO_MAX_PAGES?" Batas aman total "+AUTO_MAX_PAGES+" halaman tercapai.":""));
             Toast.makeText(this,"Crawler selesai: "+autoCompleted+" halaman",Toast.LENGTH_LONG).show();
             return;
         }
         String next=autoQueue.remove(0);
         autoVisited.add(autoKey(next));
         autoCurrentUrl=next;
+        autoCurrentCategory=autoPageCategories.containsKey(autoKey(next))?autoPageCategories.get(autoKey(next)):autoKey(siteRootUrl);
         status.setText("Membuka halaman "+(autoCompleted+1)+" • antrean "+autoQueue.size()+" • "+next);
         web.loadUrl(next);
     }
@@ -511,7 +533,12 @@ public final class SiteScanActivity extends Activity {
                 if(parsed instanceof String)parsed=new org.json.JSONTokener((String)parsed).nextValue();
                 JSONArray links=parsed instanceof JSONArray?(JSONArray)parsed:new JSONArray();
                 int before=autoQueue.size();
-                for(int i=0;i<links.length();i++){JSONObject link=links.optJSONObject(i);if(link!=null)enqueueAuto(link.optString("url",""));}
+                for(int i=0;i<links.length();i++){
+                    JSONObject link=links.optJSONObject(i);if(link==null)continue;
+                    String linkUrl=link.optString("url",""),kind=link.optString("kind","");
+                    if("category".equals(kind))enqueueAuto(linkUrl,linkUrl);
+                    else enqueueAuto(linkUrl,autoCurrentCategory);
+                }
                 autoCompleted++;
                 status.setText("Halaman "+autoCompleted+" selesai • "+links.length()+" tautan kategori/pagination diperiksa • "+(autoQueue.size()-before)+" halaman baru masuk antrean • "+autoQueue.size()+" menunggu.");
             }catch(Exception e){autoCompleted++;}
@@ -656,7 +683,7 @@ public final class SiteScanActivity extends Activity {
     }
 
     @Override protected void onDestroy(){
-        finished=true;autoCrawl=false;autoQueue.clear();handler.removeCallbacksAndMessages(null);
+        finished=true;periodicEnabled=false;autoCrawl=false;autoQueue.clear();handler.removeCallbacksAndMessages(null);
         if(web!=null){web.stopLoading();web.loadUrl("about:blank");web.destroy();web=null;}
         super.onDestroy();
     }
