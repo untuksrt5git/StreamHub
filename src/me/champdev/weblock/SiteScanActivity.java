@@ -46,13 +46,16 @@ public final class SiteScanActivity extends Activity {
         "if(!img){var p0=a.parentElement; if(p0&&p0.querySelectorAll('img').length===1)img=p0.querySelector('img');}" +
         "var box=a;for(var up0=0;up0<4&&box&&box.parentElement;up0++){if(/video|movie|post|thumb|poster|entry|item|card|media|film/i.test(String(box.className||'')+' '+String(box.parentElement.className||''))){box=box.parentElement;break;}box=box.parentElement;}" +
         "var styleText=((a.getAttribute('style')||'')+' '+(a.getAttribute('data-bg')||'')+' '+(a.getAttribute('data-background')||' ')+(box&&box.getAttribute?(' '+(box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):'')),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
-        "if(!img&&!bgMatch)continue;" +
+        "var clsHint=(' '+(a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(box&&box.className||'')+' ').toLowerCase();" +
+         // A catalog entry may be a text-only link or use a lazy/background thumbnail.
+         "if(!img&&!bgMatch&&!/video|movie|post|thumb|poster|entry|item|card|media|film/.test(clsHint))continue;" +
         "var href=abs(a.getAttribute('href'));if(!href)continue;" +
         "var hu;try{hu=new URL(href);}catch(e){continue;}" +
         "if(!/^https?:$/.test(hu.protocol)||hu.hostname!==location.hostname||href.split('#')[0]===location.href.split('#')[0])continue;" +
         "if(junk.test(hu.pathname)||bad.test(hu.hostname+hu.pathname+' '+(a.className||'')))continue;" +
-        "var poster=abs((img&&(img.currentSrc||img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy')||img.getAttribute('src')||''))||(bgMatch&&bgMatch[1])||'');" +
-        "if(!poster||bad.test(poster))continue;" +
+        "var poster=abs((img&&(img.currentSrc||img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy')||img.getAttribute('data-original-src')||img.getAttribute('data-thumb')||img.getAttribute('src')||''))||(bgMatch&&bgMatch[1])||'');" +
+        // A missing poster must never discard an otherwise valid video link.
+         "if(poster&&bad.test(poster))poster='';" +
         "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(box.getBoundingClientRect().width||0);" +
         "var h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(box.getBoundingClientRect().height||0);" +
         "if(w>0&&w<100)continue;if(h>0&&h<70)continue;" +
@@ -70,7 +73,7 @@ public final class SiteScanActivity extends Activity {
         "if(title.length>=8)score+=1;if(cardText.length>=12&&cardText.length<=500)score+=1;" +
         "if(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b|views?|watch|播放/i.test(cardText))score+=1;" +
         "if(score<5)continue;" +
-        "var key=href+'|'+poster;if(seen[key])continue;seen[key]=1;" +
+        "var key=href.split('#')[0];if(seen[key])continue;seen[key]=1;" +
         "var frame=card.querySelector('iframe[src]');var embed=frame?abs(frame.getAttribute('src')):href;" +
         "var host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
         "out.push({title:title,poster:poster,pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
