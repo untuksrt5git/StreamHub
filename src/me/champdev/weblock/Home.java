@@ -2721,7 +2721,10 @@ public class Home extends Activity {
             items.add("Pindai katalog JavaScript");
             actions.add(() -> startActivity(new Intent(this, SiteScanActivity.class)
                 .putExtra("url", s.currentUrl == null || s.currentUrl.isEmpty() ? s.url : s.currentUrl)
-                .putExtra("name", s.name)));
+                .putExtra("name", s.name)
+                .putExtra("siteId", CustomSites.id(s.url))
+                .putExtra("indexFile", s.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(s.url)) : s.indexFile)
+                .putExtra("siteRootUrl", s.url)));
             for (String m : s.mirrors) {
                 items.add(App.t(R.string.home_open_mirror, Uri.parse(m).getHost()));
                 actions.add(() -> startActivity(WebActivity.open(this, s.name, m, m)));
@@ -2920,8 +2923,8 @@ public class Home extends Activity {
             sourceRow.addView(brandLogo, new LinearLayout.LayoutParams(dp(22), dp(22)));
             loadImage(brandLogo, logo, null, 96);
         }
-        String host = Uri.parse(playUrl).getHost();
-        String label = !brand.isEmpty() ? brand : host == null ? "Sumber video" : host.replaceFirst("^www\\.", "");
+        String cardHost = Uri.parse(playUrl).getHost();
+        String label = !brand.isEmpty() ? brand : cardHost == null ? "Sumber video" : cardHost.replaceFirst("^www\\.", "");
         TextView source = text(label, sp(10, 9), MUTED, true);
         source.setMaxLines(1);
         source.setEllipsize(TextUtils.TruncateAt.END);
