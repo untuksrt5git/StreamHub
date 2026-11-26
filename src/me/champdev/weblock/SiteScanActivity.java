@@ -282,6 +282,11 @@ public final class SiteScanActivity extends Activity {
         status.setText("Mengaktifkan sumber gambar tertunda…");
         web.evaluateJavascript(activate,value->{
             if(!isScanCurrent(generation))return;
+            if(value==null || "null".equals(value.trim())){
+                status.setText("WebView tidak mengembalikan hasil aktivasi gambar; mencoba pemindaian DOM tanpa aktivasi tambahan…");
+                handler.postDelayed(()->runDomScan(generation,manual,scrollLimited),500);
+                return;
+            }
             handler.postDelayed(()->waitForImages(generation,manual,scrollLimited,0),1200);
         });
     }
@@ -305,6 +310,18 @@ public final class SiteScanActivity extends Activity {
         if(!isScanCurrent(generation))return;
         web.evaluateJavascript(script,value->{
             if(!isScanCurrent(generation))return;
+            if(value==null || "null".equals(value.trim())){
+                status.setText("Hasil pemindaian utama kosong. Memeriksa apakah JavaScript halaman masih berjalan…");
+                web.evaluateJavascript("JSON.stringify({page:location.href,title:document.title,ready:document.readyState,images:document.images?document.images.length:0,links:document.querySelectorAll('a[href]').length,body:!!document.body,bodyText:document.body?(document.body.innerText||'').length:0})",diag->{
+                    if(!isScanCurrent(generation))return;
+                    handler.removeCallbacks(scanWatchdog);
+                    scanning=false;
+                    String detail=diag==null?"diagnostik juga null":diag;
+                    status.setText("Scanner tidak menerima hasil JavaScript katalog. Pemeriksaan halaman: "+detail+
+                        ". Coba muat ulang halaman, tunggu katalog tampil, lalu pindai lagi. Jika berulang, kirim teks ini.");
+                });
+                return;
+            }
             handler.removeCallbacks(scanWatchdog);
             scanning=false;
             try{
