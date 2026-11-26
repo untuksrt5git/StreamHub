@@ -66,7 +66,7 @@ public final class SiteScanActivity extends Activity {
         "var img=a.querySelector('img')||card.querySelector('img'),poster=imageUrl(img)||bgUrl(a)||bgUrl(card);" +
         "if(!poster){var imageNodes=card.querySelectorAll('img,source,[style],[data-bg],[data-background],[data-src],[data-lazy-src],[data-original],[data-poster],[data-thumb]');var bestArea=0;" +
         "for(var bi=0;bi<imageNodes.length;bi++){var node=imageNodes[bi],u=imageUrl(node)||bgUrl(node);if(!u)continue;var rr=node.getBoundingClientRect?node.getBoundingClientRect():{width:0,height:0};var area=Math.max(0,rr.width)*Math.max(0,rr.height);if(!poster||area>bestArea){poster=u;bestArea=area;}}" +
-        "if(!poster&&a.parentElement)poster=bgUrl(a.parentElement);" +
+        "if(!poster&&a.parentElement)poster=bgUrl(a.parentElement);}" +
         "var clsHint=(' '+(a.className||'')+' '+(card.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' ').toLowerCase();" +
         "if(!isSupjav&&!img&&!poster&&!/(^|[\\s_-])(video|movie|post|thumb|thumbnail|poster|entry|item|card|media|film|clip)([\\s_-]|$)/.test(clsHint))continue;" +
         "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(card.getBoundingClientRect().width||0),h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(card.getBoundingClientRect().height||0);" +
@@ -80,8 +80,8 @@ public final class SiteScanActivity extends Activity {
         "}" +
         "var imgs=document.images||[],loaded=0,failed=0,lazy=0;for(var ii=0;ii<imgs.length;ii++){var im=imgs[ii];if(im.naturalWidth>0)loaded++;else if(im.complete&&(im.currentSrc||im.src))failed++;if(im.getAttribute('loading')==='lazy'||im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||im.getAttribute('data-original')||im.getAttribute('data-srcset'))lazy++;}" +
         "var posterCount=0;for(var oi=0;oi<out.length;oi++)if(out[oi].poster)posterCount++;" +
-        "return JSON.stringify({page:location.href,title:document.title,items:out,images:anchors.length,anchorsChecked:checked,cardsExamined:cardCandidates,posters:posterCount,missingPosters:out.length-posterCount,imageElements:imgs.length,imagesLoaded:loaded,imagesFailed:failed,lazyImages:lazy,pageHeight:Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0),adapter:isSupjav?'supjav':'generic'});" +
-        "}catch(e){return JSON.stringify({error:String(e),items:[]});}})()";
+        "return {page:location.href,title:document.title,items:out,images:anchors.length,anchorsChecked:checked,cardsExamined:cardCandidates,posters:posterCount,missingPosters:out.length-posterCount,imageElements:imgs.length,imagesLoaded:loaded,imagesFailed:failed,lazyImages:lazy,pageHeight:Math.max(document.body?document.body.scrollHeight:0,document.documentElement?document.documentElement.scrollHeight:0),adapter:isSupjav?'supjav':'generic'};" +
+        "}catch(e){return {error:String(e),items:[]};}})()";
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
