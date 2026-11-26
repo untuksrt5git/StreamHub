@@ -46,6 +46,7 @@ public final class SiteScanActivity extends Activity {
         "var anchors=isSupjav?document.querySelectorAll('.posts a[href],.post a[href],article a[href],[class*=video] a[href],[class*=movie] a[href]'):document.querySelectorAll('a[href]');" +
         "for(var i=0;i<anchors.length&&out.length<180;i++){" +
         "var a=anchors[i],img=a.querySelector('img');" +
+        "var supCard=null;if(isSupjav){var sp=a;for(var si=0;si<7&&sp;si++,sp=sp.parentElement){var sc=String(sp.className||'');if(/(^|\\s)(post|video|movie|item|entry)(\\s|$)/i.test(sc)||String(sp.tagName||'').toLowerCase()==='article'){supCard=sp;break;}}if(!supCard)continue;}" +
         "if(!img){var p0=a.parentElement; if(p0&&p0.querySelectorAll('img').length===1)img=p0.querySelector('img');}" +
         "var box=a;for(var up0=0;up0<4&&box&&box.parentElement;up0++){if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/i.test(String(box.className||'')+' '+String(box.parentElement.className||''))){box=box.parentElement;break;}box=box.parentElement;}" +
         "var styleText=((a.getAttribute('style')||'')+' '+(a.getAttribute('data-bg')||'')+' '+(a.getAttribute('data-background')||' ')+(box&&box.getAttribute?(' '+(box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):'')),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
@@ -56,18 +57,18 @@ public final class SiteScanActivity extends Activity {
         "var hu;try{hu=new URL(href);}catch(e){continue;}" +
         "if(!/^https?:$/.test(hu.protocol)||hu.hostname!==location.hostname||href.split('#')[0]===location.href.split('#')[0])continue;" +
         "if(junk.test(hu.pathname)||bad.test(hu.hostname+hu.pathname+' '+(a.className||'')))continue;" +
-        "var poster=abs((img&&(img.currentSrc||img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy')||img.getAttribute('data-original-src')||img.getAttribute('data-thumb')||img.getAttribute('src')||''))||(bgMatch&&bgMatch[1])||'');" +
+        "var poster=abs((img&&(img.currentSrc||img.getAttribute('data-src')||img.getAttribute('data-lazy-src')||img.getAttribute('data-original')||img.getAttribute('data-lazy')||img.getAttribute('data-original-src')||img.getAttribute('data-thumb')||img.getAttribute('data-url')||img.getAttribute('data-srcset')||img.getAttribute('src')||''))||(bgMatch&&bgMatch[1])||'');" +
         // A missing poster must never discard an otherwise valid video link.
          "if(poster&&bad.test(poster))poster='';" +
         "var w=img?(img.naturalWidth||parseInt(img.getAttribute('width')||'0',10)||img.getBoundingClientRect().width||0):(box.getBoundingClientRect().width||0);" +
         "var h=img?(img.naturalHeight||parseInt(img.getAttribute('height')||'0',10)||img.getBoundingClientRect().height||0):(box.getBoundingClientRect().height||0);" +
         "if(!isSupjav&&w>0&&w<100)continue;if(!isSupjav&&h>0&&h<70)continue;" +
         "var ratio=(w>0&&h>0)?w/h:1.4;if(!isSupjav&&(ratio>3.25||ratio<0.32))continue;" +
-        "var card=a,cl='';" +
+        "var card=isSupjav?supCard:a,cl='';" +
         "for(var up=0;up<5&&card&&card.parentElement;up++){cl=(' '+(card.className||'')+' '+(card.parentElement.className||'')+' ').toLowerCase();" +
         "if(/(^|[\\s_-])(video|movie|post|thumb|poster|entry|item|card|media|film)([\\s_-]|$)/.test(cl)){card=card.parentElement;break;}card=card.parentElement;}" +
         "var heading=card.querySelector('h1,h2,h3,h4,.title,.name,[class*=title]');" +
-        "var title=(a.getAttribute('title')||a.getAttribute('aria-label')||(img?img.getAttribute('alt'):'')||txt(heading)||txt(a)||txt(card)).replace(/\\s+/g,' ').trim();" +
+        "var title=(a.getAttribute('title')||a.getAttribute('aria-label')||(img?img.getAttribute('alt'):'')||txt(heading)||txt(a)||(isSupjav?'':txt(card))).replace(/\\s+/g,' ').trim();" +
         "title=title.replace(/\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b/g,'').replace(/\\s+/g,' ').trim();" +
         "if(!goodTitle(title))continue;" +
         "var cardText=txt(card);if(cardText.length>500)cardText=cardText.substring(0,500);" +
@@ -81,7 +82,7 @@ public final class SiteScanActivity extends Activity {
         "var host='';try{host=new URL(embed).hostname.replace(/^www\\./,'');}catch(e){}" +
         "out.push({title:title,poster:poster,pageUrl:href,embedUrl:embed,sourceHost:host,brand:host,description:cardText,logo:'',metadataSource:'javascript-dom'});" +
         "}" +
-        "return JSON.stringify({page:location.href,title:document.title,items:out,images:anchors.length,adapter:isSupjav?'supjav':'generic'});" +
+        "var posterCount=0;for(var oi=0;oi<out.length;oi++)if(out[oi].poster)posterCount++;return JSON.stringify({page:location.href,title:document.title,items:out,images:anchors.length,posters:posterCount,adapter:isSupjav?'supjav':'generic'});" +
         "}catch(e){return JSON.stringify({error:String(e),items:[]});}})()";
 
     @Override public void onCreate(Bundle b) {
