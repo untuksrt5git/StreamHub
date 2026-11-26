@@ -450,38 +450,40 @@ public final class SiteScanActivity extends Activity {
         JSONArray embeds=root.optJSONArray("embeds");if(embeds==null)embeds=new JSONArray();
         JSONArray oldVideos=root.optJSONArray("videos");
         JSONArray merged=new JSONArray();
-        java.util.HashSet<String> seen=new java.util.HashSet<>();
+        java.util.LinkedHashMap<String,Integer> positions=new java.util.LinkedHashMap<>();
+        // URL is the only identity. Records without a URL are kept independently.
         for(int i=0;oldVideos!=null&&i<oldVideos.length();i++){
-            JSONObject v=oldVideos.optJSONObject(i);if(v==null)continue;
-            normalizeVideo(v);
-            String key=v.optString("pageUrl","");
-            if(key.isEmpty())key=v.optString("embedUrl","");
-            if(seen.add(key))merged.put(v);
+            JSONObject old=oldVideos.optJSONObject(i);if(old==null)continue;
+            normalizeVideo(old);
+            String key=videoIdentity(old);
+            if(key.isEmpty()){merged.put(old);continue;}
+            if(!positions.containsKey(key)){positions.put(key,merged.length());merged.put(old);}
         }
+        // Fresh scan data replaces the whole matching record, never fields found by title.
+        // A missing poster may reuse the previous poster only for this exact page URL.
         for(int i=0;i<videos.length();i++){
-            JSONObject v=videos.optJSONObject(i);if(v==null)continue;
-            normalizeVideo(v);
-            String key=v.optString("pageUrl","");
-            if(key.isEmpty())key=v.optString("embedUrl","");
-            if(seen.add(key))merged.put(v);
-            else if(!key.isEmpty()){
-                for(int j=0;j<merged.length();j++){
-                    JSONObject existing=merged.optJSONObject(j);
-                    if(existing!=null&&key.equals(existing.optString("pageUrl",existing.optString("embedUrl","")))){
-                        String freshPoster=v.optString("poster","");
-                        if(!freshPoster.isEmpty()&&!freshPoster.equals(existing.optString("poster","")))existing.put("poster",freshPoster);
-                        String freshReferer=v.optString("posterReferer",result.optString("page",siteUrl));
-                        if(!freshReferer.isEmpty())existing.put("posterReferer",freshReferer);
-                        String oldTitle=existing.optString("title","");
-                        String freshTitle=v.optString("title","");
-                        boolean oldTitleInvalid=oldTitle.trim().isEmpty()||oldTitle.matches("(?i)^(video|body a site|a site|site body|body|untitled)$");
-                        if(oldTitleInvalid&&!freshTitle.trim().isEmpty())existing.put("title",freshTitle);
-                        if(existing.optString("description","").isEmpty()&&!v.optString("description","").isEmpty())existing.put("description",v.optString("description"));
-                        break;
+            JSONObject fresh=videos.optJSONObject(i);if(fresh==null)continue;
+            normalizeVideo(fresh);
+            String key=videoIdentity(fresh);
+            if(key.isEmpty()){merged.put(fresh);continue;}
+            Integer at=positions.get(key);
+            if(at==null){positions.put(key,merged.length());merged.put(fresh);}
+            else {
+                JSONObject old=merged.optJSONObject(at);
+                if(old!=null){
+                    String oldPoster=old.optString("poster","");
+                    String oldReferer=old.optString("posterReferer","");
+                    if(fresh.optString("poster","").isEmpty()&&!oldPoster.isEmpty()){
+                        fresh.put("poster",oldPoster);
+                        if(fresh.optString("posterReferer","").isEmpty()&&!oldReferer.isEmpty())fresh.put("posterReferer",oldReferer);
                     }
+                    merged.put(at,fresh);
                 }
             }
-            String embed=v.optString("embedUrl","");
+        }
+        for(int i=0;i<merged.length();i++){
+            JSONObject v=merged.optJSONObject(i);
+            String embed=v==null?"":v.optString("embedUrl","");
             if(!embed.isEmpty()&&!embeds.toString().contains(embed))embeds.put(embed);
         }
         String page=result.optString("page",siteUrl);
@@ -517,12 +519,33 @@ public final class SiteScanActivity extends Activity {
     }
 
 
+    /** URL identity only: titles are display text and are not unique. */
+    private String videoIdentity(JSONObject video) {
+        String page=video.optString("pageUrl","").trim();
+        String embed=video.optString("embedUrl","").trim();
+        String value=!page.isEmpty()?page:embed;
+        if(value.isEmpty())return "";
+        int hash=value.indexOf('#');
+        if(hash>=0)value=value.substring(0,hash);
+        return value.trim();
+    }
+
+    private String stableVideoId(String identity) {
+        if(identity==null||identity.isEmpty())return "";
+        try {
+            byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(identity.getBytes("UTF-8"));
+            StringBuilder out=new StringBuilder();
+            for(byte b:digest)out.append(String.format(java.util.Locale.ROOT,"%02x",b&0xff));
+            return out.toString();
+        } catch(Exception e) { return Integer.toHexString(identity.hashCode()); }
+    }
+
     private void normalizeVideo(JSONObject video) throws Exception {
-        String page=video.optString("pageUrl","");
-        String embed=video.optString("embedUrl","");
-        String identity=page.isEmpty()?embed:page;
+        String page=video.optString("pageUrl","").trim();
+        String embed=video.optString("embedUrl","").trim();
+        String identity=videoIdentity(video);
         video.put("schema","streamhub.catalog.v1")
-            .put("id",Integer.toHexString(identity.hashCode()))
+            .put("id",stableVideoId(identity))
             .put("category",categoryFor(page))
             .put("sourceHost",SiteAdapters.host(embed).isEmpty()?SiteAdapters.host(page):SiteAdapters.host(embed))
             .put("updatedAt",System.currentTimeMillis());
