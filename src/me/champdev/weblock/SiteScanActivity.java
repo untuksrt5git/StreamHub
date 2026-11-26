@@ -299,7 +299,7 @@ public final class SiteScanActivity extends Activity {
                 if(atBottom){if(height==scanLastHeight)scanStableBottom++;else scanStableBottom=1;}
                 else scanStableBottom=0;
                 scanLastHeight=height;
-                if(scanPasses==1||scanPasses%4==0)status.setText("Memuat bertahap… langkah "+scanPasses+" langkah" +
+                if(scanPasses==1||scanPasses%4==0)status.setText("Memuat bertahap… langkah "+scanPasses +
                     " • "+p.optInt("links",0)+" tautan • "+p.optInt("images",0)+" elemen gambar");
                 boolean stable=atBottom&&scanStableBottom>=3;
                 if(stable){
