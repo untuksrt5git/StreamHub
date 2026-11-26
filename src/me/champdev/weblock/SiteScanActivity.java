@@ -45,7 +45,7 @@ public final class SiteScanActivity extends Activity {
         "var a=anchors[i],img=a.querySelector('img');" +
         "if(!img){var p0=a.parentElement; if(p0&&p0.querySelectorAll('img').length===1)img=p0.querySelector('img');}" +
         "var box=a;for(var up0=0;up0<4&&box&&box.parentElement;up0++){if(/video|movie|post|thumb|poster|entry|item|card|media|film/i.test(String(box.className||'')+' '+String(box.parentElement.className||''))){box=box.parentElement;break;}box=box.parentElement;}" +
-        "var styleText=(box&&box.getAttribute?((box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):''),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
+        "var styleText=((a.getAttribute('style')||'')+' '+(a.getAttribute('data-bg')||'')+' '+(a.getAttribute('data-background')||' ')+(box&&box.getAttribute?(' '+(box.getAttribute('style')||'')+' '+(box.getAttribute('data-bg')||'')+' '+(box.getAttribute('data-background')||'')):'')),bgMatch=styleText.match(/url\\(['\\\"]?([^'\\\")]+)['\\\"]?\\)/i);" +
         "if(!img&&!bgMatch)continue;" +
         "var href=abs(a.getAttribute('href'));if(!href)continue;" +
         "var hu;try{hu=new URL(href);}catch(e){continue;}" +
