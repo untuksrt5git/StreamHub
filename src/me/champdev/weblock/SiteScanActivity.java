@@ -112,6 +112,7 @@ public final class SiteScanActivity extends Activity {
         indexFile=getIntent().getStringExtra("indexFile");
         if(indexFile==null||indexFile.isEmpty())indexFile=WebsiteIndexer.fileName(siteId);
         if(siteUrl==null||siteUrl.isEmpty()){finish();return;}
+        recoverCatalogFile(new File(getFilesDir(),indexFile));
         adapter=SiteAdapters.forUrl(siteUrl);
 
         LinearLayout root=new LinearLayout(this);
@@ -659,10 +660,70 @@ public final class SiteScanActivity extends Activity {
                 .put("lastResourceFailure",result.optString("lastResourceFailure","")))
             .put("javascriptItems",merged.length())
             .put("limitations","Pemindaian DOM JavaScript pada halaman publik yang dibuka di WebView. Tidak melewati login, paywall, atau proteksi bot.");
-        File tmp=new File(f.getParentFile(),f.getName()+".tmp");
-        try(FileOutputStream out=new FileOutputStream(tmp)){out.write(root.toString(2).getBytes("UTF-8"));out.getFD().sync();}
-        if(f.exists()&&!f.delete())throw new java.io.IOException("Gagal mengganti indeks lama");
-        if(!tmp.renameTo(f))throw new java.io.IOException("Gagal menyimpan indeks");
+        replaceCatalogAtomically(f,root);
+    }
+
+    /**
+     * Crash-safe catalog replacement. The temp and backup live beside the target so
+     * rename stays on one filesystem. The previous catalog is retained until the
+     * newly installed file has been parsed and verified.
+     */
+    private void replaceCatalogAtomically(File target,JSONObject data)throws Exception{
+        File dir=target.getParentFile();
+        if(dir==null)throw new java.io.IOException("Direktori katalog tidak tersedia");
+        File temp=new File(dir,target.getName()+".tmp."+android.os.Process.myPid()+"."+System.currentTimeMillis());
+        File backup=new File(dir,target.getName()+".bak");
+        byte[] bytes=data.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        try{
+            try(FileOutputStream out=new FileOutputStream(temp)){
+                out.write(bytes);
+                out.flush();
+                out.getFD().sync();
+            }
+            validateCatalogFile(temp);
+            if(backup.exists()&&!backup.delete())throw new java.io.IOException("Tidak dapat membersihkan backup lama");
+            if(target.exists()&&!target.renameTo(backup))throw new java.io.IOException("Tidak dapat memindahkan katalog lama ke backup");
+            if(!temp.renameTo(target)){
+                if(backup.exists()&&!target.exists())backup.renameTo(target);
+                throw new java.io.IOException("Penggantian katalog gagal; katalog lama dipulihkan bila tersedia");
+            }
+            validateCatalogFile(target);
+            // Target is now valid. Keep one known-good backup until the next successful save.
+        }finally{
+            if(temp.exists())temp.delete();
+        }
+    }
+
+    private boolean isValidCatalogFile(File file){
+        if(file==null||!file.isFile()||file.length()<=0)return false;
+        try{
+            String raw=Sources.read(file);
+            JSONObject parsed=new JSONObject(raw);
+            return parsed.optJSONArray("videos")!=null
+                && "streamhub.catalog.v1".equals(parsed.optString("schema",""));
+        }catch(Exception e){return false;}
+    }
+
+    private void validateCatalogFile(File file)throws Exception{
+        if(!isValidCatalogFile(file))throw new java.io.IOException("Validasi katalog gagal: JSON atau struktur videos tidak valid");
+    }
+
+    /** Restore a known-good backup after an interrupted rename; remove abandoned temp files. */
+    private void recoverCatalogFile(File target){
+        if(target==null)return;
+        File dir=target.getParentFile();
+        if(dir==null)return;
+        File backup=new File(dir,target.getName()+".bak");
+        if(!isValidCatalogFile(target)&&isValidCatalogFile(backup)){
+            if(target.exists())target.delete();
+            if(backup.renameTo(target))android.util.Log.w("StreamHubScan","Catalog restored from backup: "+target.getName());
+        }
+        File[] leftovers=dir.listFiles();
+        if(leftovers!=null)for(File file:leftovers){
+            String n=file.getName();
+            if(n.startsWith(target.getName()+".tmp."))file.delete();
+        }
+        // Do not delete .bak on startup: it is the recovery copy if a later read fails.
     }
 
 
