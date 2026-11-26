@@ -7,6 +7,8 @@ import android.os.Looper;
 import android.graphics.Color;
 import android.view.View;
 import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.CookieManager;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
@@ -125,9 +127,21 @@ public final class SiteScanActivity extends Activity {
         root.addView(progress,new LinearLayout.LayoutParams(-1,4));
 
         web=new WebView(this);
-        web.getSettings().setJavaScriptEnabled(true);
-        web.getSettings().setDomStorageEnabled(true);
-        web.getSettings().setLoadsImagesAutomatically(true);
+        WebSettings settings=web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setLoadsImagesAutomatically(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setSupportMultipleWindows(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        // Match the main browser WebView: some catalog sites behave differently in an embedded WebView.
+        settings.setUserAgentString(settings.getUserAgentString().replace("; wv", "").replace(" Version/4.0", ""));
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
         web.setBackgroundColor(Color.BLACK);
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
@@ -144,8 +158,7 @@ public final class SiteScanActivity extends Activity {
                 status.setText("Membuka "+url+" — tombol Pindai sekarang tetap bisa digunakan tanpa menunggu halaman selesai.");
             }
             @Override public void onPageCommitVisible(WebView v,String url){
-                status.setText("Konten halaman sudah tampil. Tekan Pindai sekarang, atau buka Videos/kategori terlebih dahulu.");
-                v.postDelayed(()->scan(false),4500);
+                status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
             }
             @Override public void onPageFinished(WebView v,String url){
                 status.setText("Halaman selesai dimuat: "+url+" — memeriksa isi halaman…");
@@ -156,7 +169,6 @@ public final class SiteScanActivity extends Activity {
                         status.setText("Pemeriksaan Supjav: "+d+" — jika bodyText dan html 0, halaman tidak dikirim/ditampilkan oleh situs atau WebView.");
                     }catch(Exception ignored){}
                 });
-                v.postDelayed(()->scan(false),3500);
             }
             @Override public void onReceivedHttpError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceResponse response){
                 if(request.isForMainFrame())status.setText("Server menolak halaman ("+response.getStatusCode()+" "+response.getReasonPhrase()+"). Ini bukan kegagalan pemilih katalog.");
