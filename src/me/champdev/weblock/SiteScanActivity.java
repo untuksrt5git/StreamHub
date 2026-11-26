@@ -25,6 +25,7 @@ public final class SiteScanActivity extends Activity {
     private WebView web;
     private TextView status;
     private String siteUrl, siteName, siteId;
+    private SiteAdapters.Profile adapter;
     private boolean finished, scanning;
 
     private final String script =
@@ -77,6 +78,7 @@ public final class SiteScanActivity extends Activity {
         siteName=getIntent().getStringExtra("name");
         if(siteUrl==null||siteUrl.isEmpty()){finish();return;}
         siteId=CustomSites.id(siteUrl);
+        adapter=SiteAdapters.forUrl(siteUrl);
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -96,7 +98,7 @@ public final class SiteScanActivity extends Activity {
 
         status=new TextView(this);
         status.setTextColor(Color.WHITE);
-        status.setText("Memuat website. Jika katalog belum terbaca, buka menu Videos/kategori lalu tekan Pindai halaman ini.");
+        status.setText("Memuat "+adapter.name+". Jika katalog belum terbaca, buka "+adapter.navigationHint+" lalu tekan Pindai halaman ini.");
         status.setPadding(18,10,18,10);
         root.addView(status,new LinearLayout.LayoutParams(-1,-2));
 
@@ -125,7 +127,7 @@ public final class SiteScanActivity extends Activity {
     private void scan(boolean manual){
         if(finished||web==null||scanning)return;
         scanning=true;
-        status.setText(manual?"Memindai kartu video pada halaman ini…":"Mencoba mendeteksi katalog pada halaman yang terbuka…");
+        status.setText(manual?("Memindai katalog "+adapter.name+" pada halaman ini…"):("Mencoba mendeteksi katalog "+adapter.name+"…"));
         web.evaluateJavascript(script,value->{
             scanning=false;
             if(finished)return;
@@ -181,7 +183,10 @@ public final class SiteScanActivity extends Activity {
         if(!pageExists)pages.put(new JSONObject().put("url",page).put("title",result.optString("title",siteName))
             .put("description","Katalog dipindai dari DOM JavaScript").put("poster","").put("kind","catalog")
             .put("indexedAt",System.currentTimeMillis()));
-        root.put("version",3).put("siteId",siteId).put("rootUrl",siteUrl)
+        root.put("version",4).put("siteId",siteId).put("rootUrl",siteUrl)
+            .put("schema","streamhub.catalog.v1").put("adapterId",adapter.id)
+            .put("adapterName",adapter.name).put("adapterVersion",SiteAdapters.VERSION)
+            .put("canonicalHost",SiteAdapters.host(result.optString("page",siteUrl)))
             .put("generatedAt",System.currentTimeMillis()).put("pages",pages).put("media",media)
             .put("embeds",embeds).put("videos",merged).put("status","indexed-js")
             .put("javascriptItems",merged.length())
