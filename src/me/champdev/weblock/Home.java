@@ -2868,7 +2868,7 @@ public class Home extends Activity {
                             String lower = embedPage.toLowerCase(java.util.Locale.ROOT);
                             boolean dash = lower.matches(".*\\.mpd(?:[?#].*)?$");
                             startActivity(PlayerActivity.open(this, embedPage, dash, headers, new ArrayList<>(), title)
-                                .putExtra("pageTitle", title).putExtra("pageUrl", sourcePage).putExtra("site", host).putExtra("siteUrl", sourcePage));
+                                .putExtra("mime", mediaMime(embedPage)).putExtra("pageTitle", title).putExtra("pageUrl", sourcePage).putExtra("site", host).putExtra("siteUrl", sourcePage));
                         } else {
                             Toast.makeText(this, "URL katalog ini masih berupa halaman HTML/iframe, bukan URL video langsung. StreamHub akan membuka halaman sumber; gunakan tombol Player di halaman setelah stream terdeteksi.", Toast.LENGTH_LONG).show();
                             startActivity(WebActivity.open(this, host, sourcePage, sourcePage));
@@ -2880,6 +2880,26 @@ public class Home extends Activity {
 
 
     /** Only direct media manifests/files belong in Media3; HTML pages and iframe wrappers must stay in WebView. */
+
+    String mediaMime(String address) {
+        String path;
+        try { path = Uri.parse(address).getPath(); } catch (Exception e) { return ""; }
+        if (path == null) return "";
+        String p = path.toLowerCase(java.util.Locale.ROOT);
+        if (p.endsWith(".m3u8")) return "application/x-mpegURL";
+        if (p.endsWith(".mpd")) return "application/dash+xml";
+        if (p.endsWith(".mp4") || p.endsWith(".m4v")) return "video/mp4";
+        if (p.endsWith(".webm")) return "video/webm";
+        if (p.endsWith(".mov")) return "video/quicktime";
+        if (p.endsWith(".mkv")) return "video/x-matroska";
+        if (p.endsWith(".ts")) return "video/mp2t";
+        if (p.endsWith(".m4a")) return "audio/mp4";
+        if (p.endsWith(".mp3")) return "audio/mpeg";
+        if (p.endsWith(".aac")) return "audio/aac";
+        if (p.endsWith(".ogg")) return "audio/ogg";
+        return "";
+    }
+
     boolean isDirectMediaUrl(String address) {
         if (address == null || !address.matches("(?i)^https?://.+")) return false;
         String path;
