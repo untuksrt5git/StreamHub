@@ -826,6 +826,9 @@ public final class SiteScanActivity extends Activity {
                     installed=false;
                     try{syncDirectory(dir);}catch(Exception syncFailure){failure.addSuppressed(syncFailure);}
                 }
+            }else if(installed&&!isValidCatalogFile(target)){
+                if(!target.delete())failure.addSuppressed(new java.io.IOException("Katalog baru tidak valid dan gagal dibersihkan"));
+                installed=false;
             }
             throw failure;
         }finally{
@@ -838,9 +841,15 @@ public final class SiteScanActivity extends Activity {
     private void syncDirectory(File dir)throws Exception{
         if(android.os.Build.VERSION.SDK_INT>=21){
             try{
-                java.io.FileDescriptor opened=android.system.Os.open(dir.getAbsolutePath(),android.system.OsConstants.O_RDONLY,0);
-                try{android.system.Os.fsync(opened);}finally{android.system.Os.close(opened);}
-            }catch(android.system.ErrnoException e){
+                Class<?> os=Class.forName("android.system.Os");
+                Class<?> constants=Class.forName("android.system.OsConstants");
+                int readOnly=constants.getField("O_RDONLY").getInt(null);
+                java.io.FileDescriptor opened=(java.io.FileDescriptor)os
+                    .getMethod("open",String.class,int.class,int.class)
+                    .invoke(null,dir.getAbsolutePath(),readOnly,0);
+                try{os.getMethod("fsync",java.io.FileDescriptor.class).invoke(null,opened);}
+                finally{os.getMethod("close",java.io.FileDescriptor.class).invoke(null,opened);}
+            }catch(Exception e){
                 // Some Android filesystems do not permit fsync on directory descriptors.
                 android.util.Log.w("StreamHubScan","Directory fsync unsupported: "+e.getMessage());
             }
