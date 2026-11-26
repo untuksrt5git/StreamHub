@@ -386,7 +386,10 @@ public class WebActivity extends Activity {
         // Anything the app drives from the start (the title's own page, a search for it, an episode) is behind the backdrop from the first frame
         if (playAfterLoad || pendingQuery != null || (show != null && show.series() && getIntent().getIntExtra("episode", 0) > 0))
             step(App.t(Warp.state == Warp.State.CONNECTING ? R.string.web_connecting_warp : R.string.web_step_loading), null);
-        if (!App.tv) addHomeButton(root);   // top right, where the player has it too; a TV has Menu, Back to home
+        if (!App.tv) {
+            addHomeButton(root);   // top right, where the player has it too
+            addCatalogScanButton(root);   // scan the currently open website page into its local catalog
+        }
         setContentView(root);
         // 90/120 Hz phones would repaint an animated page twice as often for no visible gain: ask for 60 (less heat)
         android.view.WindowManager.LayoutParams wp = getWindow().getAttributes();
@@ -1091,6 +1094,37 @@ public class WebActivity extends Activity {
     }
 
     /** A round Home button over the page (phones), top right where the player has it too. */
+    void addCatalogScanButton(FrameLayout root) {
+        int size = Home.dp(this, 40);
+        TextView b = new TextView(this);
+        b.setText("▦");
+        b.setTextColor(Home.ACCENT);
+        b.setTextSize(22);
+        b.setGravity(Gravity.CENTER);
+        b.setBackground(new android.graphics.drawable.GradientDrawable() {{
+            setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            setColor(0x99000000);
+        }});
+        b.setContentDescription("Pindai katalog halaman ini");
+        b.setOnClickListener(v -> {
+            String current = web == null ? null : web.getUrl();
+            if (current == null || !current.matches("(?i)^https?://.+")) current = siteUrl;
+            String rootUrl = getIntent().getStringExtra("siteRootUrl");
+            if (rootUrl == null || rootUrl.isEmpty()) rootUrl = siteUrl;
+            String id = getIntent().getStringExtra("siteId");
+            if (id == null || id.isEmpty()) id = CustomSites.id(rootUrl);
+            String file = getIntent().getStringExtra("indexFile");
+            if (file == null || file.isEmpty()) file = WebsiteIndexer.fileName(id);
+            Intent scan = new Intent(this, SiteScanActivity.class)
+                .putExtra("url", current).putExtra("name", site)
+                .putExtra("siteId", id).putExtra("indexFile", file).putExtra("siteRootUrl", rootUrl);
+            startActivity(scan);
+        });
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size, Gravity.TOP | Gravity.END);
+        lp.setMargins(0, Home.dp(this, 10) + (urlBar == null ? 0 : urlBar.getLayoutParams().height), Home.dp(this, 62), 0);
+        root.addView(b, lp);
+    }
+
     void addHomeButton(FrameLayout root) {
         int size = Home.dp(this, 40);
         ImageView b = new ImageView(this);
