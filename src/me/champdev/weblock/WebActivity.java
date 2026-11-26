@@ -1123,6 +1123,7 @@ public class WebActivity extends Activity {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size, Gravity.TOP | Gravity.END);
         lp.setMargins(0, Home.dp(this, 10) + (urlBar == null ? 0 : urlBar.getLayoutParams().height), Home.dp(this, 62), 0);
         root.addView(b, lp);
+        FloatingButtonDrag.attach(b, root, "catalog_scan");
     }
 
     void addHomeButton(FrameLayout root) {
@@ -1140,6 +1141,7 @@ public class WebActivity extends Activity {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size, Gravity.TOP | Gravity.END);
         lp.setMargins(0, Home.dp(this, 10) + (urlBar == null ? 0 : urlBar.getLayoutParams().height), Home.dp(this, 16), 0);
         root.addView(b, lp);
+        FloatingButtonDrag.attach(b, root, "home");
     }
 
     // An open pop-up on the page gets closed first (the page script knows); otherwise Back leaves as usual.
