@@ -286,6 +286,9 @@ public final class SiteScanActivity extends Activity {
                     autoCurrentUrl=url;
                     status.setText("Crawler otomatis membuka halaman "+(autoCompleted+1)+" • "+url);
                     handler.postDelayed(()->{if(autoCrawl&&!scanning&&web!=null&&url.equals(autoCurrentUrl))scan(false);},1100);
+                }else if("omg".equals(adapter.id)){
+                    // OMG uses interactive/dynamic navigation menus; never auto-scroll it in the background.
+                    status.setText("Halaman OMG siap: "+url+" — pemuatan poster otomatis dinonaktifkan agar menu dan dropdown tetap responsif. Tekan Pindai halaman jika siap.");
                 }else{
                     startPosterWarmup(v);
                     status.setText("Halaman siap: "+url+" — poster dimuat bertahap. Tekan Pindai halaman atau Pindai otomatis semua.");
@@ -317,7 +320,7 @@ public final class SiteScanActivity extends Activity {
         String js="(function(){try{if(window.__shPosterWarmupRunning)return 'busy';"+
             "window.__shPosterWarmupRunning=true;window.__shPosterWarmupCancel=false;"+
             "var original=window.pageYOffset||0,steps=0,stable=0,lastHeight=0;"+
-            "function promote(){var all=document.querySelectorAll('img,source'),vh=Math.max(240,window.innerHeight||600);"+
+            "function promote(){var promoted=0,all=document.querySelectorAll('img,source'),vh=Math.max(240,window.innerHeight||600);"+
             "for(var i=0;i<all.length;i++){var n=all[i],r=n.getBoundingClientRect();if(r.top>vh*1.8||r.bottom< -vh*.5)continue;"+
             "var src=n.getAttribute('data-original')||n.getAttribute('data-original-src')||n.getAttribute('data-src')||n.getAttribute('data-lazy-src')||n.getAttribute('data-lazy')||n.getAttribute('data-image')||n.getAttribute('data-poster')||n.getAttribute('data-thumb');"+
             "var set=n.getAttribute('data-srcset')||n.getAttribute('data-lazy-srcset')||n.getAttribute('data-original-srcset');"+
@@ -447,7 +450,9 @@ public final class SiteScanActivity extends Activity {
             "var bg=document.querySelectorAll('[data-bg],[data-background],[data-background-image]');"+
             "for(var j=0;j<bg.length;j++){var el=bg[j],u=el.getAttribute('data-bg')||el.getAttribute('data-background')||el.getAttribute('data-background-image');"+
             "if(u&&!el.style.backgroundImage){el.style.backgroundImage='url('+JSON.stringify(u).slice(1,-1)+')';backgrounds++;}}"+
-            "try{window.dispatchEvent(new Event('scroll'));window.dispatchEvent(new Event('resize'));}catch(e){}"+
+            // Keep the scroll notification used by lazy loaders; avoid synthetic resize events
+            // because responsive menus can rebuild while a scan is activating images.
+            "try{window.dispatchEvent(new Event('scroll'));}catch(e){}"+
             "return JSON.stringify({promoted:promoted,backgrounds:backgrounds,images:document.images.length});"+
             "}catch(e){return JSON.stringify({error:String(e)});}})()";
         status.setText("Mengaktifkan sumber gambar tertunda…");
