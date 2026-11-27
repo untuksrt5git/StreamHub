@@ -56,7 +56,7 @@ public final class SiteScanActivity extends Activity {
     private final java.util.LinkedHashMap<String,Integer> autoCategoryStopAfterPage=new java.util.LinkedHashMap<>();
     private final java.util.LinkedHashMap<String,Integer> autoParseRetries=new java.util.LinkedHashMap<>();
     private int autoCurrentPage=1;
-    private String autoCurrentUrl="", autoCurrentCategory="";
+    private String autoCurrentUrl="", autoCurrentCategory="", autoReturnUrl="";
     private int autoCompleted=0, autoDiscovered=0;
     private static final int AUTO_MAX_PAGES=120;
     private static final int AUTO_MAX_PAGES_PER_CATEGORY=5;
@@ -540,9 +540,30 @@ public final class SiteScanActivity extends Activity {
 
 
     /** Start a same-site crawl of category and pagination links exposed by the current page. */
+    private boolean isValidOmgCategoryUrl(String address){
+        try{
+            android.net.Uri u=android.net.Uri.parse(address);
+            String path=u.getPath()==null?"/":u.getPath().toLowerCase(Locale.ROOT).replaceAll("/+$","");
+            String fragment=u.getFragment()==null?"":u.getFragment();
+            return path.matches("^/(categories|category)/[^/]+$")
+                || (path.matches("^/(categories|category)$")&&!fragment.isEmpty())
+                || fragment.matches("(?i)^/(categories|category|tags?|genres?)/.+")
+                || u.getQueryParameter("category")!=null
+                || u.getQueryParameter("cat")!=null;
+        }catch(Exception e){return false;}
+    }
+
     private void startAutoCrawl(){
         if(finished||web==null||scanning||autoCrawl){if(status!=null&&scanning)status.setText("Pemindaian halaman sedang berlangsung. Tunggu selesai atau tekan Stop sebelum memulai ulang.");return;}
-        if(loadSelectedCategories().length()==0){discoverCategoriesAndChoose();return;}
+        JSONArray selectedCategories=loadSelectedCategories();
+        if(selectedCategories.length()==0){discoverCategoriesAndChoose();return;}
+        if("omg".equals(adapter.id)){
+            for(int i=0;i<selectedCategories.length();i++){
+                JSONObject category=selectedCategories.optJSONObject(i); if(category==null)continue;
+                String savedUrl=category.optString("url","");
+                if(!isValidOmgCategoryUrl(savedUrl)){status.setText("URL kategori OMG tersimpan memakai format lama/tidak lengkap. Ambil ulang URL kategori asli, lalu simpan pilihan kembali.");discoverCategoriesAndChoose();return;}
+            }
+        }
         periodicEnabled=true;handler.removeCallbacks(periodicScan);beginAutoCrawl();handler.postDelayed(periodicScan,PERIODIC_SCAN_MS);
     }
 
@@ -554,6 +575,7 @@ public final class SiteScanActivity extends Activity {
         autoCategoryNewItems.clear();autoCategoryValidPages.clear();autoCategoryParserWarnings.clear();
         autoCategoryStopAfterPage.clear();autoParseRetries.clear();
         autoCompleted=0;autoDiscovered=0;
+        autoReturnUrl=web.getUrl()==null?siteUrl:web.getUrl();
         // A saved "currentUrl" can point to an OMG mirror/redirect host while
         // siteRootUrl remains the registered canonical host. Never let that
         // mismatch silently reject the very first crawler page.
@@ -592,10 +614,10 @@ public final class SiteScanActivity extends Activity {
         }
         status.setText("Mencari tautan kategori asli dari halaman kategori…");
         String js="(function(){try{var out=[],seen={},isOmg="+("omg".equals(adapter.id)?"true":"false")+";var as=document.querySelectorAll('a[href]');"+
-            "function add(a){try{var u=new URL(a.href,location.href);if(!/^https?:$/.test(u.protocol)||u.hostname.replace(/^www\\./,'')!==location.hostname.replace(/^www\\./,'')||u.href.split('#')[0]===location.href.split('#')[0])return;var routeHash=(u.hash&&/^#\\/(categories|category|tags?|genres?)\\//i.test(u.hash))?u.hash:'',url=u.origin+u.pathname+u.search+routeHash,path=u.pathname.toLowerCase().replace(/\\/+$/,'');if(seen[url]||path==='/categories'||path==='/category'||path==='/pornstars'||path==='/sites'||path==='/favorites'||path==='/2257')return;var t=(a.innerText||a.textContent||a.getAttribute('title')||'').replace(/\\s+/g,' ').trim();if(t.length<2||t.length>90||/^(home|beranda|videos?|categories|category|pornstars?|porn sites|next|previous|login|register|search|contact|about|menu|more|favorites|2257)$/i.test(t))return;seen[url]=1;out.push({name:t,url:url});}catch(e){}}"+
+            "function add(a){try{var u=new URL(a.href,location.href);if(!/^https?:$/.test(u.protocol)||u.hostname.replace(/^www\\./,'')!==location.hostname.replace(/^www\\./,'')||u.href.split('#')[0]===location.href.split('#')[0])return;var path=u.pathname.toLowerCase().replace(/\\/+$/,''),routeHash=(u.hash&&(/^#\\/(categories|category|tags?|genres?)\\//i.test(u.hash)||(/^\\/(categories|category)$/.test(path)&&u.hash.length>1)))?u.hash:'',url=u.origin+u.pathname+u.search+routeHash;if(seen[url]||path==='/categories'||path==='/category'||path==='/pornstars'||path==='/sites'||path==='/favorites'||path==='/2257')return;var t=(a.innerText||a.textContent||a.getAttribute('title')||'').replace(/\\s+/g,' ').trim();if(t.length<2||t.length>90||/^(home|beranda|videos?|categories|category|pornstars?|porn sites|next|previous|login|register|search|contact|about|menu|more|favorites|2257)$/i.test(t))return;seen[url]=1;out.push({name:t,url:url});}catch(e){}}"+
             "for(var i=0;i<as.length;i++){var a=as[i],p='',c=((a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(a.parentElement&&a.parentElement.parentElement&&a.parentElement.parentElement.className||'')).toLowerCase(),t=(a.innerText||a.textContent||'').trim();try{p=new URL(a.href,location.href).pathname.toLowerCase();}catch(e){}"+
             "var nav=!!(a.closest&&a.closest('nav,header,.menu,.navigation,.navbar'));var path=/(^|\\/)(category|categories|tag|tags|genre|genres|archive)(\\/|$)/.test(p);var cls=/(category|categories|cat-item|cat-list|genre|genres|tag-list)/i.test(c);"+
-            "if(isOmg){var depth=p.split('/').filter(Boolean).length,inside=!!(a.closest&&a.closest('main,article,section,aside,.content,.categories,.category-list,.cat-list,.widget_categories'));var validPath=/^\\/(categories|category|tags?|genres?)\\/[^/]+/i.test(p)||(/^#\\/(categories|category|tags?|genres?)\\//i.test(new URL(a.href,location.href).hash))||(/[?&](category|cat|tag|genre)=/i.test(a.href));if(!nav&&(validPath||(inside&&depth>=2&&cls)))add(a);}else if((!nav&&(path||cls)||path)&&t.length>1)add(a);}return JSON.stringify(out);}catch(e){return '[]';}})()";
+            "if(isOmg){var u=new URL(a.href,location.href),hash=u.hash||'';var validPath=/^\\/(categories|category)\\/[^/]+/i.test(p)||(/^#\\/(categories|category|tags?|genres?)\\//i.test(hash))||(/^\\/(categories|category)\\/?$/i.test(p)&&hash.length>1)||(/[?&](category|cat|tag|genre)=/i.test(a.href));if(!nav&&validPath)add(a);}else if((!nav&&(path||cls)||path)&&t.length>1)add(a);}return JSON.stringify(out);}catch(e){return '[]';}})()";
         web.evaluateJavascript(js,value->{try{Object p=new org.json.JSONTokener(value==null?"[]":value).nextValue();if(p instanceof String)p=new org.json.JSONTokener((String)p).nextValue();discoveredCategories=p instanceof JSONArray?(JSONArray)p:new JSONArray();showCategoryChooser();}catch(Exception e){status.setText("Gagal membaca kategori: "+e.getMessage());}});
     }
 
@@ -661,7 +683,8 @@ public final class SiteScanActivity extends Activity {
             out.append(path.isEmpty()?"/":path);
             if(!query.isEmpty())out.append('?').append(android.text.TextUtils.join("&",query));
             String fragment=u.getFragment();
-            if(fragment!=null&&fragment.matches("(?i)^/(categories|category|tags?|genres?)/.+"))out.append('#').append(fragment);
+            String normalizedPath=path.toLowerCase();
+            if(fragment!=null&&!fragment.isEmpty()&&(fragment.matches("(?i)^/(categories|category|tags?|genres?)/.+")||("omg".equals(adapter.id)&&normalizedPath.matches("^/(categories|category)$"))))out.append('#').append(fragment);
             return out.toString();
         }catch(Exception e){return address.trim();}
     }
@@ -698,6 +721,8 @@ public final class SiteScanActivity extends Activity {
             status.setText("Putaran scraping selesai. "+autoCompleted+" halaman diproses dari halaman utama dan kategori (maksimal "+AUTO_MAX_PAGES_PER_CATEGORY+" halaman per kategori). "+autoDiscovered+" URL ditemukan. Katalog diperbarui; scan rutin "+(periodicEnabled?"aktif setiap 30 menit selama layar ini terbuka.":"nonaktif.")+
                 (autoCompleted>=AUTO_MAX_PAGES?" Batas aman total "+AUTO_MAX_PAGES+" halaman tercapai.":""));
             Toast.makeText(this,"Crawler selesai: "+autoCompleted+" halaman",Toast.LENGTH_LONG).show();
+            String restore=autoReturnUrl; autoReturnUrl="";
+            if(restore!=null&&!restore.isEmpty()&&web.getUrl()!=null&&!restore.equals(web.getUrl()))web.loadUrl(restore);
             return;
         }
         String next=autoQueue.remove(0);
