@@ -459,6 +459,15 @@ public class Home extends Activity {
         LinearLayout.LayoutParams actionLp = new LinearLayout.LayoutParams(-2, -2);
         actionLp.topMargin = dp(2);
         panel.addView(add, actionLp);
+        TextView search = text("⌕  CARI FILM DI INTERNET", sp(13, 12), Color.WHITE, true);
+        search.setGravity(Gravity.CENTER);
+        search.setPadding(dp(16), dp(10), dp(16), dp(10));
+        search.setBackground(rounded(PURPLE, dp(24)));
+        search.setOnClickListener(v -> startActivity(new Intent(this, SearchWebActivity.class)));
+        focusable(search, dp(24));
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-2, -2);
+        searchLp.topMargin = dp(8);
+        panel.addView(search, searchLp);
         return panel;
     }
 
