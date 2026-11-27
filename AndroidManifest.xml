@@ -39,6 +39,9 @@
         <activity android:name="me.champdev.weblock.SearchActivity" android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize"/>
+        <activity android:name="me.champdev.weblock.SearchWebActivity" android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize"/>
         <activity android:name="me.champdev.weblock.DownloadsActivity" android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"/>
         <activity android:name="me.champdev.weblock.TitleActivity" android:exported="false"
