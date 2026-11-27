@@ -171,7 +171,7 @@ public final class SiteScanActivity extends Activity {
 
         Button stopButton=new Button(this);
         stopButton.setText("Stop");
-        stopButton.setOnClickListener(v->{periodicEnabled=false;handler.removeCallbacks(periodicScan);autoCrawl=false;autoGeneration++;autoQueue.clear();autoQueued.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){web.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);status.setText("Scraping dijeda/dibatalkan. Antrean direset; hasil halaman yang sudah tersimpan tetap aman.");}});
+        stopButton.setOnClickListener(v->{periodicEnabled=false;handler.removeCallbacks(periodicScan);autoCrawl=false;autoGeneration++;autoQueue.clear();autoQueued.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){web.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;window.scrollTo(0,window.__shScanOriginalY||0);",null);status.setText("Scraping dijeda/dibatalkan. Posisi halaman dipulihkan; hasil halaman yang sudah tersimpan tetap aman.");}});
         row2.addView(stopButton,new LinearLayout.LayoutParams(0,-2,1));
 
         Button reloadButton=new Button(this);
@@ -497,6 +497,7 @@ public final class SiteScanActivity extends Activity {
                 web.evaluateJavascript("JSON.stringify({page:location.href,title:document.title,ready:document.readyState,images:document.images?document.images.length:0,links:document.querySelectorAll('a[href]').length,body:!!document.body,bodyText:document.body?(document.body.innerText||'').length:0})",diag->{
                     if(!isScanCurrent(generation))return;
                     handler.removeCallbacks(scanWatchdog);
+                    web.evaluateJavascript("window.scrollTo(0,window.__shScanOriginalY||0);'restored';",ignored->{});
                     scanning=false;
                     String detail=diag==null?"diagnostik juga null":diag;
                     status.setText("Scanner tidak menerima hasil JavaScript katalog. Pemeriksaan halaman: "+detail+
@@ -797,6 +798,7 @@ public final class SiteScanActivity extends Activity {
 
     private void finishScanError(int generation,String message){
         if(!isScanCurrent(generation))return;
+        web.evaluateJavascript("window.scrollTo(0,window.__shScanOriginalY||0);'restored';",ignored->{});
         scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);
         status.setText(message);
         // A failed page must invalidate this category's deep-scan completion,
