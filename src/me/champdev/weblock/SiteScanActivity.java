@@ -176,7 +176,22 @@ public final class SiteScanActivity extends Activity {
 
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
-        reloadButton.setOnClickListener(v->{if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Memuat ulang halaman…");web.reload();}});
+        reloadButton.setOnClickListener(v->{
+            if(web==null)return;
+            // Reload is a user-requested page refresh, not a continuation of an old crawl.
+            scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);
+            autoCrawl=false;autoGeneration++;autoQueue.clear();autoQueued.clear();
+            autoCurrentUrl="";autoCurrentCategory="";autoReturnUrl="";
+            openingOmgCategoryIndex=false;
+            web.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);
+            String refreshUrl=web.getUrl();
+            if(refreshUrl==null||refreshUrl.trim().isEmpty()||"about:blank".equalsIgnoreCase(refreshUrl))refreshUrl=siteUrl;
+            status.setText("Memuat ulang halaman dari jaringan…");
+            web.stopLoading();
+            // Remove stale cached HTML/redirect responses, but preserve cookies and login session.
+            web.clearCache(true);
+            web.loadUrl(refreshUrl);
+        });
         row2.addView(reloadButton,new LinearLayout.LayoutParams(0,-2,1));
 
         toolbar.addView(row1,new LinearLayout.LayoutParams(-1,-2));
