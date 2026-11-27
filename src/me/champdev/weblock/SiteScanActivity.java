@@ -41,6 +41,9 @@ public final class SiteScanActivity extends Activity {
     private static final long PERIODIC_SCAN_MS=30L*60L*1000L;
     private static final int REQUEST_EXPORT_ROUTINE=7311, REQUEST_IMPORT_ROUTINE=7312;
     private JSONArray discoveredCategories=new JSONArray();
+    private boolean openingOmgCategoryIndex;
+    private int autoMainFrameErrorCode;
+    private final java.util.LinkedHashMap<String,String> autoCategoryNames=new java.util.LinkedHashMap<>();
     private final ArrayList<String> autoQueue=new ArrayList<>();
     private final LinkedHashSet<String> autoQueued=new LinkedHashSet<>();
     private final LinkedHashSet<String> autoVisited=new LinkedHashSet<>();
@@ -227,7 +230,7 @@ public final class SiteScanActivity extends Activity {
         });
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
-                resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";
+                resourceHttpErrors=0;resourceNetworkErrors=0;lastResourceFailure="";autoMainFrameErrorCode=0;
                 lastAutoScanUrl="";
                 v.evaluateJavascript("window.__shPosterWarmupCancel=true",null);
                 status.setText("Membuka "+url+" — poster akan dimuat bertahap; pemindaian katalog tetap manual.");
@@ -236,6 +239,22 @@ public final class SiteScanActivity extends Activity {
                 status.setText("Konten halaman sudah tampil. Halaman dibiarkan berjalan dahulu; tekan Pindai sekarang jika sudah siap.");
             }
             @Override public void onPageFinished(WebView v,String url){
+                if(openingOmgCategoryIndex && "omg".equals(adapter.id)
+                        && android.net.Uri.parse(url).getPath()!=null
+                        && android.net.Uri.parse(url).getPath().toLowerCase(Locale.ROOT).contains("categories")){
+                    openingOmgCategoryIndex=false;
+                    status.setText("Indeks kategori OMG terbuka. Membaca daftar kategori yang benar…");
+                    handler.postDelayed(()->discoverCategoriesAndChoose(),900);
+                    return;
+                }
+                if(autoCrawl && autoMainFrameErrorCode>=400){
+                    int code=autoMainFrameErrorCode;
+                    autoCategoryParserWarnings.add(autoCurrentCategory);
+                    autoCompleted++;
+                    status.setText("Kategori dilewati: HTTP "+code+" pada "+url+". URL ini tidak dimasukkan ke katalog.");
+                    handler.postDelayed(this::discoverAndAdvanceAuto,500);
+                    return;
+                }
                 // Warm up lazy posters independently of the manual catalog scan.
                 // This only scrolls the current page to trigger its own lazy-image handlers,
                 // then restores the original position; it never extracts or saves catalog data.
@@ -252,7 +271,7 @@ public final class SiteScanActivity extends Activity {
                 });
             }
             @Override public void onReceivedHttpError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceResponse response){
-                if(request.isForMainFrame())status.setText("Server menolak halaman ("+response.getStatusCode()+" "+response.getReasonPhrase()+"). Ini bukan kegagalan pemilih katalog.");
+                if(request.isForMainFrame()){autoMainFrameErrorCode=response.getStatusCode();status.setText("Server menolak halaman ("+response.getStatusCode()+" "+response.getReasonPhrase()+").");}
                 else{resourceHttpErrors++;lastResourceFailure=response.getStatusCode()+" "+request.getUrl().getHost();}
             }
             @Override public void onReceivedError(WebView v,android.webkit.WebResourceRequest request,android.webkit.WebResourceError error){
@@ -469,6 +488,13 @@ public final class SiteScanActivity extends Activity {
                 web.evaluateJavascript("window.scrollTo(0,window.__shScanOriginalY||0);'restored';",ignored->{});
                 JSONArray items=result.optJSONArray("items");
                 if(items==null)items=new JSONArray();
+                if(autoCrawl){
+                    String categoryName=autoCategoryNames.containsKey(autoCurrentCategory)?autoCategoryNames.get(autoCurrentCategory):"Kategori";
+                    for(int vi=0;vi<items.length();vi++){
+                        JSONObject item=items.optJSONObject(vi);
+                        if(item!=null)item.put("category",categoryName).put("categoryUrl",autoCurrentCategory).put("categorySource","selected-scan");
+                    }
+                }
                 int posters=result.optInt("posters",0),missing=result.optInt("missingPosters",items.length()-posters);
                 String metrics="Tautan diperiksa "+result.optInt("anchorsChecked",0)+
                     " • gambar dimuat "+result.optInt("imagesLoaded",0)+"/"+result.optInt("imageElements",0)+
@@ -524,7 +550,7 @@ public final class SiteScanActivity extends Activity {
         if(finished||web==null||scanning||autoCrawl)return;
         autoGeneration++;
         autoCrawl=true;autoQueue.clear();autoQueued.clear();autoVisited.clear();
-        autoCategoryPageCounts.clear();autoPageCategories.clear();autoPageNumbers.clear();
+        autoCategoryPageCounts.clear();autoPageCategories.clear();autoPageNumbers.clear();autoCategoryNames.clear();
         autoCategoryNewItems.clear();autoCategoryValidPages.clear();autoCategoryParserWarnings.clear();
         autoCategoryStopAfterPage.clear();autoParseRetries.clear();
         autoCompleted=0;autoDiscovered=0;
@@ -540,7 +566,7 @@ public final class SiteScanActivity extends Activity {
         }
         if(initialUrl==null||initialUrl.trim().isEmpty())initialUrl=siteRootUrl;
         JSONArray chosen=loadSelectedCategories();
-        for(int i=0;i<chosen.length();i++){JSONObject c=chosen.optJSONObject(i);if(c!=null)enqueueAuto(c.optString("url",""),c.optString("url",""));}
+        for(int i=0;i<chosen.length();i++){JSONObject c=chosen.optJSONObject(i);if(c!=null){String categoryUrl=c.optString("url","");autoCategoryNames.put(autoKey(categoryUrl),c.optString("name","Kategori"));enqueueAuto(categoryUrl,categoryUrl);}}
         if(autoQueue.isEmpty()){autoCrawl=false;status.setText("Tidak ada kategori pilihan yang valid untuk situs ini. Buka Kategori rutin dan pilih ulang.");return;}
         autoNextPage();
     }
@@ -554,11 +580,22 @@ public final class SiteScanActivity extends Activity {
 
     private void discoverCategoriesAndChoose(){
         if(web==null||scanning||autoCrawl){toast("Tunggu pemindaian selesai sebelum mengatur kategori.");return;}
-        status.setText("Mencari daftar kategori dari menu dan navigasi halaman…");
-        String js="(function(){try{var out=[],seen={};var as=document.querySelectorAll('a[href]');"+
-            "function add(a){try{var u=new URL(a.href,location.href);if(!/^https?:$/.test(u.protocol)||u.hostname.replace(/^www\\./,'')!==location.hostname.replace(/^www\\./,'')||u.href.split('#')[0]===location.href.split('#')[0])return;var url=u.href.split('#')[0];if(seen[url])return;var t=(a.innerText||a.textContent||a.getAttribute('title')||'').replace(/\\s+/g,' ').trim();if(t.length<2||t.length>90||/^(home|beranda|next|previous|login|register|search|contact|about|menu|more)$/i.test(t))return;seen[url]=1;out.push({name:t,url:url});}catch(e){}}"+
+        if("omg".equals(adapter.id)){
+            String current=web.getUrl()==null?"":web.getUrl();
+            String currentPath=android.net.Uri.parse(current).getPath();
+            if(currentPath==null||!currentPath.toLowerCase(Locale.ROOT).contains("categories")){
+                status.setText("Membuka indeks kategori OMG untuk mengambil URL kategori yang sebenarnya…");
+                String locate="(function(){var a=document.querySelectorAll('a[href]');for(var i=0;i<a.length;i++){var t=(a[i].innerText||a[i].textContent||'').trim().toLowerCase(),p='';try{p=new URL(a[i].href,location.href).pathname.toLowerCase();}catch(e){}if(p.replace(/\\/+$/,'').endsWith('/categories')||t==='categories'||t==='category')return new URL(a[i].href,location.href).href;}return new URL('/categories/',location.origin).href;})()";
+                web.evaluateJavascript(locate,value->{try{Object parsed=new org.json.JSONTokener(value==null?"":value).nextValue();String target=parsed instanceof String?(String)parsed:"";if(target.isEmpty())throw new Exception("URL indeks kategori kosong");openingOmgCategoryIndex=true;web.loadUrl(target);}catch(Exception e){status.setText("Tidak dapat membuka indeks kategori OMG: "+e.getMessage());}});
+                return;
+            }
+        }
+        status.setText("Mencari tautan kategori asli dari halaman kategori…");
+        String js="(function(){try{var out=[],seen={},isOmg="+("omg".equals(adapter.id)?"true":"false")+";var as=document.querySelectorAll('a[href]');"+
+            "function add(a){try{var u=new URL(a.href,location.href);if(!/^https?:$/.test(u.protocol)||u.hostname.replace(/^www\\./,'')!==location.hostname.replace(/^www\\./,'')||u.href.split('#')[0]===location.href.split('#')[0])return;var url=u.href.split('#')[0],path=u.pathname.toLowerCase().replace(/\\/+$/,'');if(seen[url]||path==='/categories'||path==='/category'||path==='/pornstars'||path==='/sites'||path==='/favorites'||path==='/2257')return;var t=(a.innerText||a.textContent||a.getAttribute('title')||'').replace(/\\s+/g,' ').trim();if(t.length<2||t.length>90||/^(home|beranda|videos?|categories|category|pornstars?|porn sites|next|previous|login|register|search|contact|about|menu|more|favorites|2257)$/i.test(t))return;seen[url]=1;out.push({name:t,url:url});}catch(e){}}"+
             "for(var i=0;i<as.length;i++){var a=as[i],p='',c=((a.className||'')+' '+(a.parentElement&&a.parentElement.className||'')+' '+(a.parentElement&&a.parentElement.parentElement&&a.parentElement.parentElement.className||'')).toLowerCase(),t=(a.innerText||a.textContent||'').trim();try{p=new URL(a.href,location.href).pathname.toLowerCase();}catch(e){}"+
-            "var nav=!!(a.closest&&a.closest('nav,header,.menu,.navigation,.navbar,.sidebar,.widget_categories,.cat-list,.category-list,.genres,.tags'));var path=/(^|\\/)(category|categories|tag|tags|genre|genres|archive)(\\/|$)/.test(p);var cls=/(category|categories|cat-item|cat-list|genre|genres|tag-list|menu-item)/i.test(c);if((nav||path||cls)&&t.length>1)add(a);}return JSON.stringify(out);}catch(e){return '[]';}})()";
+            "var nav=!!(a.closest&&a.closest('nav,header,.menu,.navigation,.navbar'));var path=/(^|\\/)(category|categories|tag|tags|genre|genres|archive)(\\/|$)/.test(p);var cls=/(category|categories|cat-item|cat-list|genre|genres|tag-list)/i.test(c);"+
+            "if(isOmg){var depth=p.split('/').filter(Boolean).length,inside=!!(a.closest&&a.closest('main,article,section,aside,.content,.categories,.category-list,.cat-list,.widget_categories'));var validPath=/^\\/(categories|category|tags?|genres?)\\/[^/]+/i.test(p)||(/[?&](category|cat|tag|genre)=/i.test(a.href));if(!nav&&(validPath||(inside&&depth>=2&&cls)))add(a);}else if((!nav&&(path||cls)||path)&&t.length>1)add(a);}return JSON.stringify(out);}catch(e){return '[]';}})()";
         web.evaluateJavascript(js,value->{try{Object p=new org.json.JSONTokener(value==null?"[]":value).nextValue();if(p instanceof String)p=new org.json.JSONTokener((String)p).nextValue();discoveredCategories=p instanceof JSONArray?(JSONArray)p:new JSONArray();showCategoryChooser();}catch(Exception e){status.setText("Gagal membaca kategori: "+e.getMessage());}});
     }
 
