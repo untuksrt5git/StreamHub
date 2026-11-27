@@ -135,7 +135,7 @@ public class SearchWebActivity extends Activity {
         TextView url=new TextView(this); url.setText(item.optString("url")); url.setTextColor(Home.ACCENT); url.setTextSize(11); card.addView(url);
         LinearLayout row=new LinearLayout(this);
         Button save=button("Tambah ke Website Saya"); save.setOnClickListener(v->addSite(item.optString("url")));
-        Button open=button("Buka"); open.setOnClickListener(v->startActivity(new Intent(this,WebActivity.class).putExtra("url",item.optString("url"))));
+        Button open=button("Buka"); open.setOnClickListener(v->startActivity(WebActivity.open(this,item.optString("title"),item.optString("url"),item.optString("url"))));
         row.addView(save,new LinearLayout.LayoutParams(0,-2,1)); row.addView(open,new LinearLayout.LayoutParams(0,-2,1)); card.addView(row);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.topMargin=Home.dp(this,6); results.addView(card,lp);
     }
