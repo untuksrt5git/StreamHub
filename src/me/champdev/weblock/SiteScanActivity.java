@@ -522,6 +522,8 @@ public final class SiteScanActivity extends Activity {
     }
 
 
+    private void toast(String message){Toast.makeText(this,message,Toast.LENGTH_LONG).show();}
+
     private android.content.SharedPreferences routinePrefs(){return getSharedPreferences("routine_scan_"+(siteId==null?"site":siteId),MODE_PRIVATE);}
     private JSONArray loadSelectedCategories(){try{return new JSONArray(routinePrefs().getString("selected_categories","[]"));}catch(Exception e){return new JSONArray();}}
     private void saveSelectedCategories(JSONArray categories){routinePrefs().edit().putString("selected_categories",categories.toString()).apply();}
