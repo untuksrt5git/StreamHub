@@ -1096,9 +1096,13 @@ public final class SiteScanActivity extends Activity {
         String page=video.optString("pageUrl","").trim();
         String embed=video.optString("embedUrl","").trim();
         String identity=videoIdentity(video);
+        // Keep the selected source category from the scanner; infer a generic type only
+        // for older records or pages scanned manually without a selected category.
+        String category=video.optString("category","").trim();
+        if(category.isEmpty())category=categoryFor(page);
         video.put("schema","streamhub.catalog.v1")
             .put("id",stableVideoId(identity))
-            .put("category",categoryFor(page))
+            .put("category",category)
             .put("sourceHost",SiteAdapters.host(embed).isEmpty()?SiteAdapters.host(page):SiteAdapters.host(embed))
             .put("updatedAt",System.currentTimeMillis());
         if(video.optString("title","").trim().isEmpty()) video.put("title","Video");
