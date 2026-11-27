@@ -229,6 +229,15 @@ public final class SiteScanActivity extends Activity {
         // Match the normal browser page: some catalog sites reject the default Android WebView UA.
         scanSettings.setUserAgentString(scanSettings.getUserAgentString().replace("; wv","").replace(" Version/4.0",""));
         web.setBackgroundColor(Color.BLACK);
+        // Cancel the background poster scroll on the native touch-down, before a site's
+        // custom dropdown/select/menu receives the gesture. Returning false preserves
+        // normal WebView click, select and navigation handling.
+        web.setOnTouchListener((view,event)->{
+            if(event.getAction()==android.view.MotionEvent.ACTION_DOWN){
+                view.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);
+            }
+            return false;
+        });
         web.setWebChromeClient(new WebChromeClient(){
             @Override public void onProgressChanged(WebView v,int p){progress.setProgress(p);}
             @Override public boolean onConsoleMessage(android.webkit.ConsoleMessage m){
