@@ -234,7 +234,7 @@ public final class SiteScanActivity extends Activity {
         // normal WebView click, select and navigation handling.
         web.setOnTouchListener((view,event)->{
             if(event.getAction()==android.view.MotionEvent.ACTION_DOWN){
-                view.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);
+                web.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);
             }
             return false;
         });
