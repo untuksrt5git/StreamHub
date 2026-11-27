@@ -133,28 +133,52 @@ public final class SiteScanActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(8,17,31));
 
-        LinearLayout bar=new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
+        // Two compact toolbar rows keep every action visible on phone and Android TV.
+        LinearLayout toolbar=new LinearLayout(this);
+        toolbar.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout row1=new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout row2=new LinearLayout(this);
+        row2.setOrientation(LinearLayout.HORIZONTAL);
+
         Button autoButton=new Button(this);
-        autoButton.setText("Mulai scan rutin (30 mnt)");
+        autoButton.setText("Scan rutin");
         autoButton.setOnClickListener(v->startAutoCrawl());
-        bar.addView(autoButton,new LinearLayout.LayoutParams(0,-2,1));
-        Button categoryButton=new Button(this); categoryButton.setText("Kategori rutin"); categoryButton.setOnClickListener(v->discoverCategoriesAndChoose()); bar.addView(categoryButton,new LinearLayout.LayoutParams(0,-2,1));
-        Button exportButton=new Button(this); exportButton.setText("Ekspor"); exportButton.setOnClickListener(v->exportRoutineConfig()); bar.addView(exportButton,new LinearLayout.LayoutParams(-2,-2));
-        Button importButton=new Button(this); importButton.setText("Impor"); importButton.setOnClickListener(v->importRoutineConfig()); bar.addView(importButton,new LinearLayout.LayoutParams(-2,-2));
+        row1.addView(autoButton,new LinearLayout.LayoutParams(0,-2,1));
+
+        Button categoryButton=new Button(this);
+        categoryButton.setText("Kategori");
+        categoryButton.setOnClickListener(v->discoverCategoriesAndChoose());
+        row1.addView(categoryButton,new LinearLayout.LayoutParams(0,-2,1));
+
+        Button exportButton=new Button(this);
+        exportButton.setText("Ekspor");
+        exportButton.setOnClickListener(v->exportRoutineConfig());
+        row1.addView(exportButton,new LinearLayout.LayoutParams(0,-2,1));
+
+        Button importButton=new Button(this);
+        importButton.setText("Impor");
+        importButton.setOnClickListener(v->importRoutineConfig());
+        row1.addView(importButton,new LinearLayout.LayoutParams(0,-2,1));
+
         Button scanButton=new Button(this);
         scanButton.setText("Pindai halaman");
         scanButton.setOnClickListener(v->scan(true));
-        bar.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
+        row2.addView(scanButton,new LinearLayout.LayoutParams(0,-2,1));
+
         Button stopButton=new Button(this);
         stopButton.setText("Stop");
         stopButton.setOnClickListener(v->{periodicEnabled=false;handler.removeCallbacks(periodicScan);autoCrawl=false;autoGeneration++;autoQueue.clear();autoQueued.clear();if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){web.evaluateJavascript("window.__shPosterWarmupCancel=true;window.__shPosterWarmupRunning=false;",null);status.setText("Scraping dijeda/dibatalkan. Antrean direset; hasil halaman yang sudah tersimpan tetap aman.");}});
-        bar.addView(stopButton,new LinearLayout.LayoutParams(-2,-2));
+        row2.addView(stopButton,new LinearLayout.LayoutParams(0,-2,1));
+
         Button reloadButton=new Button(this);
         reloadButton.setText("Muat ulang");
         reloadButton.setOnClickListener(v->{if(scanning){scanning=false;scanGeneration++;handler.removeCallbacks(scanWatchdog);}if(web!=null){status.setText("Memuat ulang halaman…");web.reload();}});
-        bar.addView(reloadButton,new LinearLayout.LayoutParams(-2,-2));
-        root.addView(bar,new LinearLayout.LayoutParams(-1,-2));
+        row2.addView(reloadButton,new LinearLayout.LayoutParams(0,-2,1));
+
+        toolbar.addView(row1,new LinearLayout.LayoutParams(-1,-2));
+        toolbar.addView(row2,new LinearLayout.LayoutParams(-1,-2));
+        root.addView(toolbar,new LinearLayout.LayoutParams(-1,-2));
 
         status=new TextView(this);
         status.setTextColor(Color.WHITE);
