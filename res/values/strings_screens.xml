@@ -18,11 +18,11 @@
     <string name="web_download_failed">Download failed: %1$s</string>
     <string name="web_saved">Saved %1$s to Downloads</string>
     <string name="web_reload">Reload</string>
-    <string name="web_play_native">Play in AnantPlayer</string>
-    <string name="web_native_auto">AnantPlayer: auto (switches when a video starts)</string>
-    <string name="web_native_off">AnantPlayer: off</string>
-    <string name="web_native_off_toast">AnantPlayer off</string>
-    <string name="web_native_on_toast">AnantPlayer on</string>
+    <string name="web_play_native">Play in StreamHub Player</string>
+    <string name="web_native_auto">StreamHub Player: auto (switches when a video starts)</string>
+    <string name="web_native_off">StreamHub Player: off</string>
+    <string name="web_native_off_toast">StreamHub Player off</string>
+    <string name="web_native_on_toast">StreamHub Player on</string>
     <string name="web_use_warp">Use WARP for %1$s</string>
     <string name="web_no_warp">Don\'t use WARP for %1$s</string>
     <string name="web_warp_on_site">WARP on for this site</string>

@@ -32,6 +32,7 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -42,7 +43,8 @@ import java.util.Map;
 /** Start screen: Continue watching, then the sources' streaming sites by category, then the user's own sites. */
 public class Home extends Activity {
     // One accent, kept for play and progress; everything else is ink, two card tones and two text tones
-    static final int BG = 0xFF0E0C13, CARD = 0xFF1A1721, CARD_HI = 0xFF282431, NAV = 0xFF131019, ACCENT = 0xFFFF3B5C, TEXT = 0xFFF4F2F7, MUTED = 0xFF9690A3;
+    static final int BG = 0xFF08111F, CARD = 0xFF111E31, CARD_HI = 0xFF1B2C46, NAV = 0xFF0B1728, ACCENT = 0xFF28B8FF, TEXT = 0xFFF2F7FF, MUTED = 0xFF9AAAC0;
+    static final int PURPLE = 0xFF8B5CF6;
     // Decoded pictures: a sixth of the app's memory (it was a fixed 24 MB, about 17 posters, so scrolling back decoded them all again)
     static final LruCache<String, Bitmap> images = new LruCache<String, Bitmap>((int) Math.min(Runtime.getRuntime().maxMemory() / 6, 64L << 20)) {
         @Override protected int sizeOf(String k, Bitmap b) { return b.getAllocationByteCount(); }
@@ -134,6 +136,7 @@ public class Home extends Activity {
         if (tabs() && state == null) tab = 0;
         setContentView(withNav(sv));
         Warp.listeners.add(warpChanged);
+        CustomSites.refresh(this);   // quietly refresh user website indexes and follow working redirects
 
         // Once per install: an update from a version with built-in sources gets them added (Sources.migrate), then a notice
         if (!App.prefs.contains("sourcesVersion")) Warp.whenSettled(() -> App.io.execute(() -> { if (Sources.migrate()) runOnUiThread(this::build); }));
@@ -340,6 +343,13 @@ public class Home extends Activity {
     }
 
     boolean refreshing;
+    // The user's indexed-video catalog keeps its filters while Home is redrawn.
+    String indexedOriginFilter = "";
+    String indexedCategoryFilter = "";
+    int indexedCatalogPage = 0;
+    int indexedCatalogPageSize = 20;
+    String indexedSearchQuery = "";
+    int indexedSortMode = 0; // 0 = urutan sumber, 1 = A-Z, 2 = Z-A
 
     /** Loads the open tab again: catalog lists from the network, and the site lists (Sports, Home) or the channels (IPTV). */
     void refresh() {
@@ -414,6 +424,7 @@ public class Home extends Activity {
             case 3: sportsTab(); break;
             case 4: catalogTab("series", Cats.ANIME, Catalog.POPULAR_ANIME); break;
             case 5: iptvTab(); break;
+            case 6: indexedCatalogTab(); break;
             default: settingsTab();
         }
         View first = firstCard;
@@ -424,10 +435,44 @@ public class Home extends Activity {
         }
     }
 
+    /** StreamHub identity panel: a distinct blue-violet welcome area and a direct website action. */
+    View homeIdentity() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(20), dp(18), dp(20), dp(18));
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            new int[]{0xFF12345B, 0xFF38266E});
+        bg.setCornerRadius(dp(20));
+        panel.setBackground(bg);
+        TextView brand = text("STREAMHUB", sp(25, 22), Color.WHITE, true);
+        TextView tagline = text("Website streaming pilihan Anda, dalam satu aplikasi.",
+            sp(13, 12), 0xFFDCE8FF, false);
+        tagline.setPadding(0, dp(4), 0, dp(12));
+        TextView add = text("+  TAMBAH WEBSITE", sp(13, 12), Color.WHITE, true);
+        add.setGravity(Gravity.CENTER);
+        add.setPadding(dp(16), dp(10), dp(16), dp(10));
+        add.setBackground(rounded(ACCENT, dp(24)));
+        add.setOnClickListener(v -> addSiteDialog());
+        focusable(add, dp(24));
+        panel.addView(brand);
+        panel.addView(tagline);
+        LinearLayout.LayoutParams actionLp = new LinearLayout.LayoutParams(-2, -2);
+        actionLp.topMargin = dp(2);
+        panel.addView(add, actionLp);
+        TextView search = text("⌕  CARI FILM DI INTERNET", sp(13, 12), Color.WHITE, true);
+        search.setGravity(Gravity.CENTER);
+        search.setPadding(dp(16), dp(10), dp(16), dp(10));
+        search.setBackground(rounded(PURPLE, dp(24)));
+        search.setOnClickListener(v -> startActivity(new Intent(this, SearchWebActivity.class)));
+        focusable(search, dp(24));
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-2, -2);
+        searchLp.topMargin = dp(8);
+        panel.addView(search, searchLp);
+        return panel;
+    }
+
     void buildHome() {
-        heroBox = new FrameLayout(this);   // filled by the first poster row that has titles
-        heroBox.setVisibility(View.GONE);
-        col.addView(heroBox);
+        col.addView(homeIdentity(), new LinearLayout.LayoutParams(-1, -2));
         if (!Update.available().isEmpty()) col.addView(updateLine(Update.available()));
 
         List<History.Entry> history = History.list();
@@ -437,35 +482,24 @@ public class Home extends Activity {
             for (History.Entry e : history) row.addView(historyCard(e));
         }
 
-        List<Sites.Site> favs = Sites.favorites();
-        if (!favs.isEmpty()) {   // only once something is marked (Add a site is also in Settings, Sites)
-            LinearLayout favHead = new LinearLayout(this);
-            favHead.setGravity(Gravity.BOTTOM);
-            favHead.addView(heading(App.t(R.string.home_favorites_heart)), new LinearLayout.LayoutParams(0, -2, 1));
-            favHead.addView(iconButton(R.drawable.ic_delete, App.t(R.string.home_clear_all_favorites), v -> confirmClearFavorites(favs.size())));
-            col.addView(favHead);
-            LinearLayout favRow = row();
-            for (Sites.Site s : favs) favRow.addView(siteCard(s, false));
-            favRow.addView(addCard());
+        // StreamHub starts with the websites the viewer chose, not a pre-filled catalog from another app.
+        List<Sites.Site> sites = Sites.favorites();
+        col.addView(heading("WEBSITE SAYA"));
+        if (sites.isEmpty()) {
+            TextView empty = text("Belum ada website. Tekan Tambah Website untuk memasukkan alamat situs streaming pilihan Anda.",
+                sp(14, 12), MUTED, false);
+            empty.setPadding(0, dp(2), 0, dp(12));
+            col.addView(empty);
         }
+        LinearLayout siteRow = row();
+        for (Sites.Site site : sites) siteRow.addView(siteCard(site, false));
+        siteRow.addView(addCard());
 
         List<Catalog.Title> mine = Catalog.mine();
         if (!mine.isEmpty()) {
             col.addView(heading(App.t(R.string.home_my_list)));
             posterRow(row(), App.t(R.string.home_my_list), mine);
         }
-        String movies = App.t(R.string.home_tab_movies), shows = App.t(R.string.home_tab_tv), anime = App.t(R.string.home_tab_anime);
-        // The viewer's own country first (its languages' most popular titles), then the world's
-        String region = App.region();
-        loadHero();
-        if (Catalog.languages(region).length > 0) {
-            String country = new java.util.Locale("", region).getDisplayCountry();
-            titleRow(movies, country, "movie", "local=" + region, 1);
-            titleRow(shows, country, "series", "local=" + region, 2);
-        }
-        // The rows below the first screen are added a frame later, so Home shows up at once
-        final int id = built;
-        col.post(() -> { if (id == built && tab == 0) lowerHome(movies, shows, anime); });
     }
 
     void lowerHome(String movies, String shows, String anime) {
@@ -665,7 +699,7 @@ public class Home extends Activity {
         String key = art + "@1280";
         next.setTag(key);
         Bitmap hit = images.get(key);
-        if (hit != null) show(next, hit, arrived); else startLoad(next, art, arrived, 1280, key);
+        if (hit != null) show(next, hit, arrived); else startLoad(next, art, arrived, 1280, key, "");
     }
 
     /** The words of one title in the picture's frame. */
@@ -778,10 +812,10 @@ public class Home extends Activity {
     // ---- tabs ----
 
     static final int[] TABS = {R.string.home_tab_home, R.string.home_tab_movies, R.string.home_tab_tv, R.string.home_tab_sports, R.string.home_tab_anime,
-        R.string.home_tab_iptv, R.string.home_tab_settings};
-    static final int SETTINGS = 6;
+        R.string.home_tab_iptv, R.string.home_tab_iptv, R.string.home_tab_settings};
+    static final int SETTINGS = 7;
     final List<TextView> tabViews = new ArrayList<>();
-    static final int[] TAB_ICONS = {R.drawable.ic_home, R.drawable.ic_movie, R.drawable.ic_tv, R.drawable.ic_trophy, R.drawable.ic_sparkle, R.drawable.ic_live, R.drawable.ic_settings};
+    static final int[] TAB_ICONS = {R.drawable.ic_home, R.drawable.ic_movie, R.drawable.ic_tv, R.drawable.ic_trophy, R.drawable.ic_sparkle, R.drawable.ic_live, R.drawable.ic_movie, R.drawable.ic_settings};
     static int tab;
     static final Map<Integer, String> genres = new HashMap<>();
     static String focusGenre;
@@ -803,7 +837,7 @@ public class Home extends Activity {
         else bar.setBackgroundColor(NAV);
         for (int i = 0; i < SETTINGS; i++) {   // Settings is the gear (top bar on a phone, foot of the rail on a TV)
             final int n = i;
-            TextView t = text(App.t(TABS[i]), 11, MUTED, true);
+            TextView t = text(i == 6 ? "Katalog" : App.t(TABS[i]), 11, MUTED, true);
             t.setContentDescription(t.getText());
             tabViews.add(t);
             t.setGravity(Gravity.CENTER);
@@ -829,11 +863,11 @@ public class Home extends Activity {
 
     static final int RAIL = 72;   // dp
 
-    /** The app's name, written like the project banner: Anant in white, Play in the accent red. */
+    /** The app's name, written like the project banner: Stream in white, Hub in the accent blue. */
     TextView brand(float size) {
         TextView name = text("", size, TEXT, true);
-        android.text.SpannableString s = new android.text.SpannableString("AnantPlay");
-        s.setSpan(new android.text.style.ForegroundColorSpan(ACCENT), 5, 9, 0);
+        android.text.SpannableString s = new android.text.SpannableString("StreamHub");
+        s.setSpan(new android.text.style.ForegroundColorSpan(ACCENT), 6, 9, 0);
         name.setText(s);
         name.setSingleLine();
         return name;
@@ -1644,11 +1678,37 @@ public class Home extends Activity {
             .show();
     }
 
-    /** Keeps only valid-looking IPv4/IPv6 addresses, then starts WARP again with them (when it is switched on). */
+    /** Accept literal IPv4/IPv6 resolver addresses only; never accept hostnames or malformed numeric strings. */
+    static boolean validDnsIp(String value) {
+        if (value == null || value.isEmpty()) return false;
+        if (value.indexOf(':') >= 0) {
+            try { return java.net.InetAddress.getByName(value) instanceof java.net.Inet6Address; }
+            catch (Exception e) { return false; }
+        }
+        String[] octets = value.split("\\.", -1);
+        if (octets.length != 4) return false;
+        for (String part : octets) {
+            if (part.isEmpty() || part.length() > 3) return false;
+            try { int n = Integer.parseInt(part); if (n < 0 || n > 255) return false; }
+            catch (NumberFormatException e) { return false; }
+        }
+        return true;
+    }
+
+    /** Save validated resolver IPs and restart WARP so its tunnel resolver list is rebuilt. */
     void saveWarpDns(String typed) {
-        StringBuilder ok = new StringBuilder();
-        for (String ip : typed.split("[,;\\s]+")) if (ip.matches("[0-9a-fA-F:.]{3,45}") && (ip.contains(".") || ip.contains(":"))) ok.append(ok.length() > 0 ? "," : "").append(ip);
-        App.prefs.edit().putString("warpDns", ok.toString()).apply();
+        java.util.LinkedHashSet<String> addresses = new java.util.LinkedHashSet<>();
+        for (String ip : typed.trim().split("[,;\\s]+")) {
+            if (ip.isEmpty()) continue;
+            if (!validDnsIp(ip)) {
+                toast("Alamat DNS tidak valid: " + ip + ". Gunakan IPv4 atau IPv6.");
+                return;
+            }
+            addresses.add(ip);
+        }
+        StringBuilder value = new StringBuilder();
+        for (String ip : addresses) value.append(value.length() > 0 ? "," : "").append(ip);
+        App.prefs.edit().putString("warpDns", value.toString()).apply();
         if (App.prefs.getBoolean("warp", true)) { Warp.stop(); Warp.start(); }
         build();
     }
@@ -1997,18 +2057,17 @@ public class Home extends Activity {
         // Which build is this? (the TV and phone APKs share a package, so say it on screen)
         String ver = "";
         try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
-        section(App.t(R.string.home_donate), R.drawable.ic_heart, true);
-        View why = note(App.t(R.string.home_donate_help));
+        section("PENGEMBANGAN STREAMHUB", R.drawable.ic_code, true);
+        View why = note("StreamHub dikembangkan secara independen. Kode sumber, pembaruan, dan pelaporan masalah tersedia di repositori resmi.");
         why.setPadding(u(52, 50), 0, dp(14), dp(8));
         why.setVisibility(secOpen ? View.VISIBLE : View.GONE);
         secBox.addView(why);
-        secBox.addView(settingRow(R.drawable.ic_heart, "Buy Me a Coffee", "buymeacoffee.com/rohit267", null, v -> openLink("https://buymeacoffee.com/rohit267")));
-        secBox.addView(settingRow(R.drawable.ic_heart, "PayPal", "paypal.me/champdev", null, v -> openLink("https://paypal.me/champdev")));
+        secBox.addView(settingRow(R.drawable.ic_code, "GitHub StreamHub", "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
 
         section(App.t(R.string.home_about), R.drawable.ic_info, true);
-        secBox.addView(settingRow(R.drawable.ic_language, App.t(R.string.home_about_site), "anantplay.github.io/android", null, v -> openLink("https://anantplay.github.io/android/")));
-        secBox.addView(settingRow(R.drawable.ic_code, App.t(R.string.home_about_source), "github.com/AnantPlay/android", null, v -> openLink("https://github.com/AnantPlay/android")));
-        secBox.addView(settingRow(R.drawable.ic_info, App.t(R.string.home_about_bug), "github.com/AnantPlay/android/issues", null, v -> openLink("https://github.com/AnantPlay/android/issues")));
+        secBox.addView(settingRow(R.drawable.ic_language, App.t(R.string.home_about_site), "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
+        secBox.addView(settingRow(R.drawable.ic_code, App.t(R.string.home_about_source), "github.com/untuksrt5git/StreamHub", null, v -> openLink("https://github.com/untuksrt5git/StreamHub")));
+        secBox.addView(settingRow(R.drawable.ic_info, App.t(R.string.home_about_bug), "github.com/untuksrt5git/StreamHub/issues", null, v -> openLink("https://github.com/untuksrt5git/StreamHub/issues")));
         TextView about = text(App.t(App.tv ? R.string.home_about_tv : R.string.home_about_phone, ver), sp(12, 11), MUTED, false);
         about.setPadding(u(52, 50), dp(6), dp(14), dp(12));
         about.setVisibility(secOpen ? View.VISIBLE : View.GONE);
@@ -2644,7 +2703,8 @@ public class Home extends Activity {
         name.setPadding(u(10, 8), 0, 0, 0);
         top.addView(name);
         card.addView(top);
-        TextView tags = text(s.tags.isEmpty() ? host : s.tags, sp(12, 11), MUTED, false);
+        String siteHint = !s.indexFile.isEmpty() ? "Indeks lokal siap · " + host : (s.tags.isEmpty() ? host : s.tags);
+        TextView tags = text(siteHint, sp(12, 11), MUTED, false);
         tags.setSingleLine();
         tags.setEllipsize(TextUtils.TruncateAt.END);
         tags.setPadding(0, u(6, 2), 0, 0);
@@ -2663,6 +2723,20 @@ public class Home extends Activity {
             List<Runnable> actions = new ArrayList<>();
             items.add(App.t(Sites.isFavorite(s.url) ? R.string.home_remove_favorite : R.string.home_add_favorite));
             actions.add(() -> { Sites.toggleFavorite(s); build(); });
+            File indexFile = new File(getFilesDir(), s.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(s.url)) : s.indexFile);
+            if (indexFile.exists()) {
+                items.add("Lihat hasil indeks website");
+                actions.add(() -> showSiteIndex(s));
+            }
+            items.add(indexFile.exists() ? "Pindai ulang website (HTML)" : "Pindai website (HTML)");
+            actions.add(() -> CustomSites.add(this, s.url, message -> { toast(message); build(); }));
+            items.add("Pindai katalog JavaScript");
+            actions.add(() -> startActivity(new Intent(this, SiteScanActivity.class)
+                .putExtra("url", s.currentUrl == null || s.currentUrl.isEmpty() ? s.url : s.currentUrl)
+                .putExtra("name", s.name)
+                .putExtra("siteId", CustomSites.id(s.url))
+                .putExtra("indexFile", s.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(s.url)) : s.indexFile)
+                .putExtra("siteRootUrl", s.url)));
             for (String m : s.mirrors) {
                 items.add(App.t(R.string.home_open_mirror, Uri.parse(m).getHost()));
                 actions.add(() -> startActivity(WebActivity.open(this, s.name, m, m)));
@@ -2675,9 +2749,460 @@ public class Home extends Activity {
         return card;
     }
 
+    /** Opens the local JSON index as a browsable list of pages found on the user's site. */
+    /** Catalog built from locally indexed websites. Only one filtered page is attached at a time. */
+    void indexedCatalogTab() {
+        col.addView(heading("KATALOG VIDEO"));
+        TextView intro = text("Pilih kelompok sumber atau jenis video. Katalog dibagi menjadi beberapa halaman agar ratusan kartu tidak dimuat sekaligus.", sp(14, 12), MUTED, false);
+        intro.setPadding(0, 0, 0, dp(10));
+        col.addView(intro);
+
+        // Include the authoritative custom-site registry as well as favorites.
+        // This prevents a valid JS index being hidden when the favorite entry is stale.
+        Map<String, Sites.Site> registered = new java.util.LinkedHashMap<>();
+        for (Sites.Site favorite : Sites.favorites()) registered.put(favorite.url, favorite);
+        try {
+            org.json.JSONObject registry = new org.json.JSONObject(Sources.read(new File(getFilesDir(), "custom-sites.json")));
+            org.json.JSONArray entries = registry.optJSONArray("sites");
+            for (int i = 0; entries != null && i < entries.length(); i++) {
+                org.json.JSONObject entry = entries.optJSONObject(i);
+                if (entry == null) continue;
+                String url = entry.optString("url", "");
+                if (!url.matches("(?i)^https?://.+")) continue;
+                Sites.Site site = registered.get(url);
+                if (site == null) site = new Sites.Site();
+                site.url = url;
+                site.name = entry.optString("name", Uri.parse(url).getHost());
+                site.currentUrl = entry.optString("currentUrl", url);
+                site.indexFile = entry.optString("indexFile", WebsiteIndexer.fileName(entry.optString("id", CustomSites.id(url))));
+                registered.put(url, site);
+            }
+        } catch (Exception ignored) { }
+        List<Sites.Site> sites = new ArrayList<>(registered.values());
+        if (sites.isEmpty()) {
+            col.addView(note("Belum ada website. Tambahkan website dari tab Beranda."));
+            return;
+        }
+
+        Map<String, List<org.json.JSONObject>> byOrigin = new java.util.LinkedHashMap<>();
+        for (Sites.Site site : sites) {
+            String fileName = site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile;
+            try {
+                org.json.JSONObject root = new org.json.JSONObject(Sources.read(new File(getFilesDir(), fileName)));
+                org.json.JSONArray videos = root.optJSONArray("videos");
+                for (int i = 0; videos != null && i < videos.length(); i++) {
+                    org.json.JSONObject video = videos.optJSONObject(i);
+                    if (video == null) continue;
+                    // Group by the website the user added, not the third-party embed/player host.
+                    String origin = site.name == null || site.name.isEmpty() ? Uri.parse(site.url).getHost() : site.name;
+                    if (!byOrigin.containsKey(origin)) byOrigin.put(origin, new ArrayList<>());
+                    byOrigin.get(origin).add(video);
+                }
+            } catch (Exception ignored) { }
+        }
+
+        List<String> origins = new ArrayList<>(byOrigin.keySet());
+        List<String> categories = new ArrayList<>();
+        categories.add("Semua jenis");
+        for (List<org.json.JSONObject> group : byOrigin.values()) for (org.json.JSONObject v : group) {
+            String c = v.optString("category", "video");
+            if (c.isEmpty()) c = "video";
+            if (!categories.contains(c)) categories.add(c);
+        }
+        if (!indexedOriginFilter.isEmpty() && !byOrigin.containsKey(indexedOriginFilter)) indexedOriginFilter = "";
+        if (!categories.contains(indexedCategoryFilter) && !indexedCategoryFilter.isEmpty()) indexedCategoryFilter = "";
+
+        LinearLayout filters = new LinearLayout(this);
+        filters.setOrientation(LinearLayout.HORIZONTAL);
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        filters.setPadding(0, 0, 0, dp(8));
+        TextView groupButton = text("Kelompok: " + (indexedOriginFilter.isEmpty() ? "Semua" : indexedOriginFilter) + " ▾", sp(13, 11), TEXT, true);
+        groupButton.setPadding(dp(10), dp(10), dp(10), dp(10));
+        groupButton.setBackground(rounded(CARD_HI, dp(9)));
+        groupButton.setOnClickListener(v -> {
+            List<String> choices = new ArrayList<>(); choices.add("Semua kelompok"); choices.addAll(origins);
+            new AlertDialog.Builder(this).setTitle("Pilih kelompok sumber").setItems(choices.toArray(new String[0]), (d, which) -> {
+                indexedOriginFilter = which == 0 ? "" : origins.get(which - 1); indexedCatalogPage = 0; build();
+            }).show();
+        });
+        filters.addView(groupButton, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView typeButton = text("Jenis: " + (indexedCategoryFilter.isEmpty() ? "Semua" : indexedCategoryFilter) + " ▾", sp(13, 11), TEXT, true);
+        typeButton.setPadding(dp(10), dp(10), dp(10), dp(10));
+        typeButton.setBackground(rounded(CARD_HI, dp(9)));
+        LinearLayout.LayoutParams typeLp = new LinearLayout.LayoutParams(0, -2, 1);
+        typeLp.leftMargin = dp(6);
+        typeButton.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("Pilih jenis video")
+            .setItems(categories.toArray(new String[0]), (d, which) -> {
+                indexedCategoryFilter = which == 0 ? "" : categories.get(which); indexedCatalogPage = 0; build();
+            }).show());
+        filters.addView(typeButton, typeLp);
+        col.addView(filters);
+
+        LinearLayout searchTools = new LinearLayout(this);
+        searchTools.setOrientation(LinearLayout.HORIZONTAL);
+        searchTools.setGravity(Gravity.CENTER_VERTICAL);
+        searchTools.setPadding(0, 0, 0, dp(8));
+        TextView searchButton = text(indexedSearchQuery.isEmpty() ? "Cari video  ⌕" : "Cari: " + indexedSearchQuery + "  ✕", sp(12, 10), TEXT, true);
+        searchButton.setPadding(dp(10), dp(9), dp(10), dp(9));
+        searchButton.setSingleLine();
+        searchButton.setEllipsize(TextUtils.TruncateAt.END);
+        searchButton.setBackground(rounded(CARD_HI, dp(9)));
+        searchButton.setOnClickListener(v -> {
+            EditText query = new EditText(this);
+            query.setSingleLine(true);
+            query.setHint("Judul, nama situs, atau kata kunci");
+            query.setInputType(InputType.TYPE_CLASS_TEXT);
+            query.setText(indexedSearchQuery);
+            query.setSelection(query.length());
+            new AlertDialog.Builder(this).setTitle("Cari di katalog video").setView(query)
+                .setPositiveButton("Terapkan", (d, w) -> { indexedSearchQuery = query.getText().toString().trim(); indexedCatalogPage = 0; build(); })
+                .setNeutralButton("Hapus", (d, w) -> { indexedSearchQuery = ""; indexedCatalogPage = 0; build(); })
+                .setNegativeButton(android.R.string.cancel, null).show();
+        });
+        searchTools.addView(searchButton, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView sortButton = text("Urut: " + (indexedSortMode == 1 ? "A–Z" : indexedSortMode == 2 ? "Z–A" : "Asli") + " ▾", sp(12, 10), TEXT, true);
+        sortButton.setPadding(dp(10), dp(9), dp(10), dp(9));
+        sortButton.setBackground(rounded(CARD_HI, dp(9)));
+        LinearLayout.LayoutParams sortLp = new LinearLayout.LayoutParams(-2, -2);
+        sortLp.leftMargin = dp(6);
+        sortButton.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("Urutkan katalog")
+            .setItems(new String[]{"Urutan sumber", "Judul A–Z", "Judul Z–A"}, (d, which) -> { indexedSortMode = which; indexedCatalogPage = 0; build(); }).show());
+        searchTools.addView(sortButton, sortLp);
+        col.addView(searchTools);
+
+        List<org.json.JSONObject> filtered = new ArrayList<>();
+        for (Map.Entry<String, List<org.json.JSONObject>> group : byOrigin.entrySet()) {
+            if (!indexedOriginFilter.isEmpty() && !indexedOriginFilter.equals(group.getKey())) continue;
+            for (org.json.JSONObject video : group.getValue()) {
+                String category = video.optString("category", "video");
+                if (!indexedCategoryFilter.isEmpty() && !indexedCategoryFilter.equals(category)) continue;
+                filtered.add(video);
+            }
+        }
+        if (!indexedSearchQuery.isEmpty()) {
+            String q = indexedSearchQuery.toLowerCase(java.util.Locale.ROOT);
+            filtered.removeIf(video -> !(video.optString("title").toLowerCase(java.util.Locale.ROOT).contains(q)
+                || video.optString("brand").toLowerCase(java.util.Locale.ROOT).contains(q)
+                || video.optString("description").toLowerCase(java.util.Locale.ROOT).contains(q)));
+        }
+        if (indexedSortMode != 0) filtered.sort((a, b) -> {
+            int order = a.optString("title", "").compareToIgnoreCase(b.optString("title", ""));
+            return indexedSortMode == 1 ? order : -order;
+        });
+        // Keep the catalog compact: show at most seven videos in each subcategory.
+        // A subcategory's "Lihat semua" opens that category with seven items per page.
+        final int SUBCATEGORY_LIMIT = 7;
+        int total = filtered.size();
+        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density);
+        int usableWidth = Math.max(240, screenWidthDp - 2 * side);
+        int minCardWidth = App.tv ? 190 : (getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE ? 150 : 142);
+        int columns = Math.max(2, Math.min(App.tv ? 6 : 5, usableWidth / minCardWidth));
+        // Match Movie Series posters: portrait 2:3 (posterCard uses width x width*3/2).
+        // Catalog cards fill their grid cell, so derive the height from that cell's available width.
+        int indexedPosterHeight = posterW() * 3 / 2;
+
+        if (total == 0) {
+            col.addView(note("Tidak ada video untuk filter ini. Pilih kelompok atau jenis lain."));
+            return;
+        }
+
+        if (indexedCategoryFilter.isEmpty()) {
+            // All categories: render independent compact groups, preserving source order.
+            Map<String, List<org.json.JSONObject>> byCategory = new java.util.LinkedHashMap<>();
+            for (org.json.JSONObject video : filtered) {
+                String category = video.optString("category", "video");
+                if (category.isEmpty()) category = "video";
+                if (!byCategory.containsKey(category)) byCategory.put(category, new ArrayList<>());
+                byCategory.get(category).add(video);
+            }
+            int shownTotal = 0;
+            for (Map.Entry<String, List<org.json.JSONObject>> group : byCategory.entrySet()) {
+                String category = group.getKey();
+                List<org.json.JSONObject> videos = group.getValue();
+                int shown = Math.min(SUBCATEGORY_LIMIT, videos.size());
+                shownTotal += shown;
+                TextView subheading = heading(category + "  ·  " + videos.size());
+                col.addView(subheading);
+                LinearLayout row = null;
+                int inRow = 0;
+                for (int i = 0; i < shown; i++) {
+                    org.json.JSONObject video = videos.get(i);
+                    String title = video.optString("title", "Video");
+                    String poster = video.optString("poster", "");
+                    String embedUrl = video.optString("embedUrl", "");
+                    String pageUrl = video.optString("pageUrl", "");
+                    String posterReferer = video.optString("posterReferer", pageUrl);
+                    String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
+                    if (playUrl.isEmpty()) continue;
+                    if (row == null || inRow >= columns) {
+                        row = new LinearLayout(this);
+                        row.setOrientation(LinearLayout.HORIZONTAL);
+                        row.setGravity(Gravity.TOP);
+                        col.addView(row);
+                        inRow = 0;
+                    }
+                    row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer,
+                        video.optString("brand", ""), video.optString("logo", ""), video.optString("description", ""), indexedPosterHeight),
+                        new LinearLayout.LayoutParams(0, -2, 1));
+                    inRow++;
+                }
+                if (row != null && inRow > 0 && inRow < columns)
+                    while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+
+                if (videos.size() > SUBCATEGORY_LIMIT) {
+                    TextView more = text("Lihat semua " + category + "  ·  " + videos.size() + " video  ›",
+                        sp(12, 11), TEXT, true);
+                    more.setPadding(dp(12), dp(9), dp(12), dp(9));
+                    more.setBackground(rounded(CARD_HI, dp(9)));
+                    more.setOnClickListener(v -> {
+                        indexedCategoryFilter = category;
+                        indexedCatalogPageSize = SUBCATEGORY_LIMIT;
+                        indexedCatalogPage = 0;
+                        build();
+                    });
+                    focusable(more, dp(9));
+                    LinearLayout.LayoutParams moreLp = new LinearLayout.LayoutParams(-2, -2);
+                    moreLp.bottomMargin = dp(12);
+                    col.addView(more, moreLp);
+                }
+            }
+            col.addView(text(shownTotal + " poster ditampilkan dari " + total + " video • maksimal 7 per subkategori",
+                sp(12, 10), MUTED, false));
+            return;
+        }
+
+        // One selected subcategory: keep all its entries reachable, seven per page.
+        indexedCatalogPageSize = SUBCATEGORY_LIMIT;
+        int pages = Math.max(1, (total + SUBCATEGORY_LIMIT - 1) / SUBCATEGORY_LIMIT);
+        indexedCatalogPage = Math.max(0, Math.min(indexedCatalogPage, pages - 1));
+        int from = indexedCatalogPage * SUBCATEGORY_LIMIT;
+        int to = Math.min(total, from + SUBCATEGORY_LIMIT);
+        col.addView(text(total + " video • " + pages + " halaman • 7 per halaman",
+            sp(12, 10), MUTED, false));
+        LinearLayout row = null;
+        int inRow = 0;
+        for (int i = from; i < to; i++) {
+            org.json.JSONObject video = filtered.get(i);
+            String title = video.optString("title", "Video");
+            String poster = video.optString("poster", "");
+            String embedUrl = video.optString("embedUrl", "");
+            String pageUrl = video.optString("pageUrl", "");
+            String posterReferer = video.optString("posterReferer", pageUrl);
+            String playUrl = embedUrl.matches("(?i)^https?://.+") ? embedUrl : pageUrl;
+            if (playUrl.isEmpty()) continue;
+            if (row == null || inRow >= columns) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.TOP);
+                col.addView(row);
+                inRow = 0;
+            }
+            row.addView(indexedVideoCard(title, poster, playUrl, pageUrl, posterReferer,
+                video.optString("brand", ""), video.optString("logo", ""), video.optString("description", ""), indexedPosterHeight),
+                new LinearLayout.LayoutParams(0, -2, 1));
+            inRow++;
+        }
+        if (row != null && inRow > 0 && inRow < columns)
+            while (inRow++ < columns) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+
+        LinearLayout pager = new LinearLayout(this);
+        pager.setGravity(Gravity.CENTER);
+        pager.setPadding(0, dp(12), 0, dp(20));
+        TextView previous = text("‹ Sebelumnya", sp(14, 12), indexedCatalogPage == 0 ? MUTED : TEXT, true);
+        previous.setPadding(dp(16), dp(10), dp(16), dp(10));
+        previous.setBackground(rounded(CARD_HI, dp(9)));
+        previous.setOnClickListener(v -> { if (indexedCatalogPage > 0) { indexedCatalogPage--; build(); } });
+        pager.addView(previous);
+        TextView pageLabel = text((indexedCatalogPage + 1) + " / " + pages, sp(13, 11), MUTED, true);
+        pageLabel.setPadding(dp(16), dp(10), dp(16), dp(10));
+        pager.addView(pageLabel);
+        TextView next = text("Berikutnya ›", sp(14, 12), indexedCatalogPage + 1 >= pages ? MUTED : TEXT, true);
+        next.setPadding(dp(16), dp(10), dp(16), dp(10));
+        next.setBackground(rounded(CARD_HI, dp(9)));
+        next.setOnClickListener(v -> { if (indexedCatalogPage + 1 < pages) { indexedCatalogPage++; build(); } });
+        pager.addView(next);
+        col.addView(pager);
+    }
+
+    View indexedVideoCard(String title, String poster, String playUrl, String pageUrl, String posterReferer, String brand, String logo, String description, int posterHeight) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(5), dp(5), dp(5), dp(12));
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+        cp.setMargins(0, 0, dp(7), dp(8));
+        card.setLayoutParams(cp);
+        card.setBackground(rounded(CARD, dp(12)));
+        FrameLayout frame = new FrameLayout(this);
+        int imageHeight = posterHeight;
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        FrameLayout.LayoutParams posterLp = new FrameLayout.LayoutParams(dp(posterW()), dp(imageHeight), Gravity.CENTER);
+        frame.addView(image, posterLp);
+        TextView placeholder = text("▶", 28, MUTED, true);
+        placeholder.setGravity(Gravity.CENTER);
+        placeholder.setBackground(rounded(CARD_HI, dp(9)));
+        frame.addView(placeholder, new FrameLayout.LayoutParams(dp(posterW()), dp(imageHeight), Gravity.CENTER));
+        card.addView(frame);
+        if (poster.startsWith("http")) loadImage(image, poster, placeholder, App.tv ? 480 : 240, posterReferer.isEmpty() ? pageUrl : posterReferer);
+        TextView name = text(title, sp(14, 12), TEXT, true);
+        name.setMaxLines(2);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        name.setPadding(dp(5), dp(8), dp(5), 0);
+        card.addView(name);
+        LinearLayout sourceRow = new LinearLayout(this);
+        sourceRow.setGravity(Gravity.CENTER_VERTICAL);
+        sourceRow.setPadding(dp(5), dp(5), dp(5), 0);
+        if (logo.matches("(?i)^https?://.+")) {
+            ImageView brandLogo = new ImageView(this);
+            brandLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            sourceRow.addView(brandLogo, new LinearLayout.LayoutParams(dp(22), dp(22)));
+            loadImage(brandLogo, logo, null, 96);
+        }
+        String cardHost = Uri.parse(playUrl).getHost();
+        String label = !brand.isEmpty() ? brand : cardHost == null ? "Sumber video" : cardHost.replaceFirst("^www\\.", "");
+        TextView source = text(label, sp(10, 9), MUTED, true);
+        source.setMaxLines(1);
+        source.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams sourceLp = new LinearLayout.LayoutParams(0, -2, 1);
+        sourceLp.leftMargin = dp(5);
+        sourceRow.addView(source, sourceLp);
+        card.addView(sourceRow);
+        if (!description.isEmpty()) {
+            TextView summary = text(description, sp(11, 10), MUTED, false);
+            summary.setMaxLines(2);
+            summary.setEllipsize(TextUtils.TruncateAt.END);
+            summary.setPadding(dp(5), dp(4), dp(5), 0);
+            card.addView(summary);
+        }
+        focusable(card, dp(12));
+        // One tap is the default path: open the actual detail page and let WebActivity
+        // detect the real stream, then hand it to the native player automatically.
+        // A listing iframe is not assumed to be a playable media URL.
+        card.setOnClickListener(v -> {
+            String sourcePage = pageUrl.matches("(?i)^https?://.+") ? pageUrl : playUrl;
+            String playbackHost = Uri.parse(sourcePage).getHost();
+            if (playbackHost == null || playbackHost.isEmpty()) playbackHost = title;
+            if (isDirectMediaUrl(playUrl)) {
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Referer", sourcePage);
+                String lower = playUrl.toLowerCase(java.util.Locale.ROOT);
+                boolean dash = lower.matches(".*\\.mpd(?:[?#].*)?$");
+                startActivity(PlayerActivity.open(this, playUrl, dash, headers, new ArrayList<>(), title)
+                    .putExtra("mime", mediaMime(playUrl)).putExtra("pageTitle", title)
+                    .putExtra("pageUrl", sourcePage).putExtra("site", playbackHost).putExtra("siteUrl", sourcePage));
+            } else {
+                startActivity(WebActivity.open(this, playbackHost, sourcePage, sourcePage));
+            }
+        });
+        // Keep manual alternatives available without interrupting normal one-tap playback.
+        card.setOnLongClickListener(v -> {
+            String sourcePage = pageUrl.matches("(?i)^https?://.+") ? pageUrl : playUrl;
+            String embedPage = playUrl.matches("(?i)^https?://.+") ? playUrl : sourcePage;
+            String playbackHost = Uri.parse(sourcePage).getHost();
+            if (playbackHost == null || playbackHost.isEmpty()) playbackHost = title;
+            final String hostForPlayback = playbackHost;
+            new AlertDialog.Builder(this).setTitle(title)
+                .setItems(new String[]{"Putar otomatis di StreamHub", "Buka embed/player sumber", "Coba player native"},
+                    (dialog, choice) -> {
+                        if (choice == 0) startActivity(WebActivity.open(this, hostForPlayback, sourcePage, sourcePage));
+                        else if (choice == 1) startActivity(WebActivity.open(this, hostForPlayback, sourcePage, embedPage));
+                        else if (isDirectMediaUrl(embedPage)) {
+                            Map<String, String> headers = new HashMap<>();
+                            headers.put("Referer", sourcePage);
+                            String lower = embedPage.toLowerCase(java.util.Locale.ROOT);
+                            boolean dash = lower.matches(".*\\.mpd(?:[?#].*)?$");
+                            startActivity(PlayerActivity.open(this, embedPage, dash, headers, new ArrayList<>(), title)
+                                .putExtra("mime", mediaMime(embedPage)).putExtra("pageTitle", title)
+                                .putExtra("pageUrl", sourcePage).putExtra("site", hostForPlayback).putExtra("siteUrl", sourcePage));
+                        } else {
+                            Toast.makeText(this, "Belum ada URL media langsung. Buka halaman sumber agar StreamHub mencoba mendeteksi videonya.", Toast.LENGTH_LONG).show();
+                            startActivity(WebActivity.open(this, hostForPlayback, sourcePage, sourcePage));
+                        }
+                    }).show();
+            return true;
+        });
+        return card;
+    }
+
+
+    /** Only direct media manifests/files belong in Media3; HTML pages and iframe wrappers must stay in WebView. */
+
+    String mediaMime(String address) {
+        String path;
+        try { path = Uri.parse(address).getPath(); } catch (Exception e) { return ""; }
+        if (path == null) return "";
+        String p = path.toLowerCase(java.util.Locale.ROOT);
+        if (p.endsWith(".m3u8")) return "application/x-mpegURL";
+        if (p.endsWith(".mpd")) return "application/dash+xml";
+        if (p.endsWith(".mp4") || p.endsWith(".m4v")) return "video/mp4";
+        if (p.endsWith(".webm")) return "video/webm";
+        if (p.endsWith(".mov")) return "video/quicktime";
+        if (p.endsWith(".mkv")) return "video/x-matroska";
+        if (p.endsWith(".ts")) return "video/mp2t";
+        if (p.endsWith(".m4a")) return "audio/mp4";
+        if (p.endsWith(".mp3")) return "audio/mpeg";
+        if (p.endsWith(".aac")) return "audio/aac";
+        if (p.endsWith(".ogg")) return "audio/ogg";
+        return "";
+    }
+
+    boolean isDirectMediaUrl(String address) {
+        if (address == null || !address.matches("(?i)^https?://.+")) return false;
+        String path;
+        try { path = Uri.parse(address).getPath(); } catch (Exception e) { return false; }
+        if (path == null) return false;
+        String p = path.toLowerCase(java.util.Locale.ROOT);
+        return p.matches(".*\\.(m3u8|mpd|mp4|m4v|webm|mov|mkv|ts|m4a|mp3|aac|ogg)$");
+    }
+
+    void showSiteIndex(Sites.Site site) {
+        File file = new File(getFilesDir(), site.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(site.url)) : site.indexFile);
+        org.json.JSONObject root;
+        try { root = new org.json.JSONObject(Sources.read(file)); }
+        catch (Exception e) { root = new org.json.JSONObject(); }
+        org.json.JSONArray pages = root.optJSONArray("pages");
+        if (pages == null || pages.length() == 0) {
+            new AlertDialog.Builder(this).setTitle("Indeks website")
+                .setMessage("Belum ada halaman yang berhasil dipindai. Coba Pindai ulang; beberapa situs membutuhkan JavaScript atau login.")
+                .setPositiveButton(android.R.string.ok, null).show();
+            return;
+        }
+        List<String> labels = new ArrayList<>();
+        List<String> urls = new ArrayList<>();
+        for (int i = 0; i < pages.length(); i++) {
+            org.json.JSONObject p = pages.optJSONObject(i);
+            if (p == null) continue;
+            String title = p.optString("title", p.optString("url"));
+            String kind = p.optString("kind", "page");
+            labels.add(title + "  ·  " + kind);
+            urls.add(p.optString("url"));
+        }
+        org.json.JSONArray embedLinks = root.optJSONArray("embeds");
+        for (int i = 0; embedLinks != null && i < embedLinks.length(); i++) {
+            String embed = embedLinks.optString(i);
+            if (embed.startsWith("http")) {
+                labels.add("Buka pemutar video  ·  " + Uri.parse(embed).getHost());
+                urls.add(embed);
+            }
+        }
+        int media = root.optJSONArray("media") == null ? 0 : root.optJSONArray("media").length();
+        int embeds = embedLinks == null ? 0 : embedLinks.length();
+        new AlertDialog.Builder(this).setTitle("Indeks: " + site.name)
+            .setMessage(labels.size() + " halaman · " + media + " file media · " + embeds + " embed video")
+            .setItems(labels.toArray(new String[0]), (dialog, which) -> {
+                if (which >= 0 && which < urls.size() && !urls.get(which).isEmpty())
+                    startActivity(WebActivity.open(this, site.name, site.url, urls.get(which)));
+            }).setNeutralButton("Buka beranda", (dialog, which) -> openSite(site))
+            .setPositiveButton(android.R.string.ok, null).show();
+    }
+
     /** What tapping a site card does; the title page overrides it to search for the title there. */
     void openSite(Sites.Site s) {
-        startActivity(WebActivity.open(this, s.name, s.url, s.url));
+        Intent intent = WebActivity.open(this, s.name, s.url, s.currentUrl.isEmpty() ? s.url : s.currentUrl);
+        intent.putExtra("siteId", CustomSites.id(s.url))
+            .putExtra("indexFile", s.indexFile.isEmpty() ? WebsiteIndexer.fileName(CustomSites.id(s.url)) : s.indexFile)
+            .putExtra("siteRootUrl", s.url);
+        startActivity(intent);
     }
 
     /** True for the site card that is the title page's current pick (it gets an outline). */
@@ -2742,7 +3267,7 @@ public class Home extends Activity {
         col.addView(h);
     }
 
-    /** Once, after an update from AnantPlay: the new name, and where the sites and channels went. */
+    /** Once, after an update from StreamHub: the new name, and where the sites and channels went. */
     void sourcesNotice() {
         if (!App.prefs.getBoolean("sourcesNotice", false)) return;
         App.prefs.edit().putBoolean("sourcesNotice", false).apply();
@@ -2754,14 +3279,19 @@ public class Home extends Activity {
 
     void addSiteDialog() {
         EditText in = WebActivity.field(this, "https://example.com", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        new AlertDialog.Builder(this).setTitle(App.t(R.string.home_add_site)).setView(WebActivity.box(this, in))
-            .setPositiveButton(App.t(R.string.home_add), (d, w) -> {
-                if (in.getText().toString().trim().isEmpty()) return;
-                Sites.addCustom(in.getText().toString());
-                build();
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
+        AlertDialog dlg = new AlertDialog.Builder(this).setTitle("Tambah website ke StreamHub")
+            .setMessage("Masukkan alamat website. StreamHub akan mengambil metadata, memindai hingga 18 halaman HTML di domain tersebut, lalu menyimpan daftar halaman dan tautan media ke JSON lokal. Situs yang hanya memuat katalog melalui JavaScript atau login mungkin tidak terbaca.")
+            .setView(WebActivity.box(this, in))
+            .setPositiveButton(App.t(R.string.home_add), null)
+            .setNegativeButton(android.R.string.cancel, null).create();
+        dlg.setOnShowListener(v -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
+            String raw = in.getText().toString().trim();
+            if (raw.isEmpty()) { in.setError("Masukkan alamat website"); return; }
+            dlg.dismiss();
+            toast("Menambahkan website dan membuat indeks…");
+            CustomSites.add(this, raw, message -> { toast(message); build(); });
+        }));
+        dlg.show();
     }
 
     LinearLayout.LayoutParams cardParams(int w, int h) {
@@ -2866,16 +3396,21 @@ public class Home extends Activity {
 
     /** `min`: the least width in pixels the picture is kept at (the card's own width; backdrops more). Decoded once per size, shared by every card that shows it. */
     void loadImage(ImageView into, String url, View placeholder, int min) {
+        loadImage(into, url, placeholder, min, "");
+    }
+
+    /** Website posters may be protected against hotlinking: fetch them with the catalog page as Referer. */
+    void loadImage(ImageView into, String url, View placeholder, int min, String referer) {
         String key = url + "@" + min;
         into.setTag(key);
         Bitmap hit = images.get(key);
         if (hit != null) { show(into, hit, placeholder); return; }
         if (lazyImages()) {   // fetched and decoded when the card is on screen or close to it, not for a whole page of rows at once
-            lazy.add(new Object[]{into, (Runnable) () -> startLoad(into, url, placeholder, min, key)});
+            lazy.add(new Object[]{into, (Runnable) () -> startLoad(into, url, placeholder, min, key, referer)});
             if (lazy.size() == 1) into.post(this::checkLazy);
             return;
         }
-        startLoad(into, url, placeholder, min, key);
+        startLoad(into, url, placeholder, min, key, referer);
     }
 
     /** Whether this screen loads pictures as they come near the screen (a recycling grid loads its own way). */
@@ -2901,7 +3436,7 @@ public class Home extends Activity {
         }
     }
 
-    void startLoad(ImageView into, String url, View placeholder, int min, String key) {
+    void startLoad(ImageView into, String url, View placeholder, int min, String key, String referer) {
         java.util.function.Consumer<Bitmap> done = b -> {
             if (b == null || !key.equals(into.getTag())) return;   // failed, or the view shows something else by now
             boolean had = into.getDrawable() != null;   // another size already shows: swapped in place, no fade from nothing
@@ -2916,7 +3451,7 @@ public class Home extends Activity {
             loading.put(key, new ArrayList<>(java.util.Collections.singletonList(done)));
         }
         imagePool.execute(() -> {
-            Bitmap b = fetch(url, min);
+            Bitmap b = fetch(url, min, referer);
             if (b != null) images.put(key, b);
             List<java.util.function.Consumer<Bitmap>> waiting;
             synchronized (loading) { waiting = loading.remove(key); }
@@ -2936,7 +3471,7 @@ public class Home extends Activity {
     }
 
     static Bitmap fetch(String url) {
-        return fetch(url, 480);
+        return fetch(url, 480, "");
     }
 
     /** Pictures nobody has looked at for 60 days leave the disk (reading one counts as looking), and the oldest go first when the folder passes 200 MB. */
@@ -2953,8 +3488,12 @@ public class Home extends Activity {
     }
 
     static Bitmap fetch(String url, int min) {
+        return fetch(url, min, "");
+    }
+
+    static Bitmap fetch(String url, int min, String referer) {
         Long bad = failed.get(url);
-        if (bad != null && System.currentTimeMillis() - bad < 10 * 60000) return null;   // a missing picture is not asked for on every redraw
+        if (bad != null && System.currentTimeMillis() - bad < 90 * 1000) return null;   // short cooldown: transient host failures can recover quickly
         try {
             byte[] sha = MessageDigest.getInstance("SHA-1").digest(url.getBytes("UTF-8"));
             StringBuilder name = new StringBuilder();
@@ -2965,15 +3504,37 @@ public class Home extends Activity {
             File f = new File(dir, name.toString());
             if (!f.exists()) {
                 File tmp = new File(dir, name + "." + Thread.currentThread().getId() + ".tmp");   // two sizes of one picture can load at once
-                try (InputStream in = Warp.openPublic(url, 6000, 20000); FileOutputStream out = new FileOutputStream(tmp)) {
-                    byte[] buf = new byte[16384];
-                    for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                Exception downloadError = null;
+                for (int attempt = 0; attempt < 2; attempt++) {
+                    try (InputStream in = Warp.openPublic(url, 7000, 22000, referer); FileOutputStream out = new FileOutputStream(tmp)) {
+                        byte[] buf = new byte[16384];
+                        for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                        downloadError = null;
+                        break;
+                    } catch (Exception e) {
+                        downloadError = e;
+                        tmp.delete();
+                        if (attempt == 0) {
+                            try { Thread.sleep(450); } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                                throw new IOException("Image retry interrupted", interrupted);
+                            }
+                        }
+                    }
                 }
+                if (downloadError != null) throw downloadError;
                 if (!tmp.renameTo(f)) return null;
             } else if (System.currentTimeMillis() - f.lastModified() > 24L * 3600 * 1000) f.setLastModified(System.currentTimeMillis());
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(f.getPath(), o);
+            if (o.outWidth <= 0 || o.outHeight <= 0) {
+                android.util.Log.w("StreamHubPoster", "Invalid image bounds; mime=" + o.outMimeType
+                    + ", bytes=" + f.length() + ", host=" + android.net.Uri.parse(url).getHost());
+            } else {
+                android.util.Log.d("StreamHubPoster", "Image bounds=" + o.outWidth + "x" + o.outHeight
+                    + ", mime=" + o.outMimeType + ", host=" + android.net.Uri.parse(url).getHost());
+            }
             o.inSampleSize = 1;
             while (o.outWidth / (o.inSampleSize * 2) >= min) o.inSampleSize *= 2;
             o.inJustDecodeBounds = false;
@@ -2984,9 +3545,17 @@ public class Home extends Activity {
             if (min <= 400 && "image/jpeg".equals(o.outMimeType)) o.inPreferredConfig = Bitmap.Config.RGB_565;
             Bitmap b = BitmapFactory.decodeFile(f.getPath(), o);
             if (b != null) b.setDensity(Bitmap.DENSITY_NONE);   // the scaling above was ours, not a screen density
-            if (b == null) { f.delete(); failed.put(url, System.currentTimeMillis()); }   // not a picture (an error page): don't keep it
+            if (b == null) {
+                android.util.Log.w("StreamHubPoster", "Bitmap decode failed; mime=" + o.outMimeType
+                    + ", bounds=" + o.outWidth + "x" + o.outHeight + ", bytes=" + f.length()
+                    + ", host=" + android.net.Uri.parse(url).getHost());
+                f.delete();
+                failed.put(url, System.currentTimeMillis());
+            }
             return b;
         } catch (Exception e) {
+            android.util.Log.w("StreamHubPoster", "Poster fetch failed; host=" + android.net.Uri.parse(url).getHost()
+                + ", reason=" + e.getClass().getSimpleName() + ": " + e.getMessage());
             failed.put(url, System.currentTimeMillis());
             return null;
         } catch (OutOfMemoryError e) {

@@ -74,15 +74,15 @@ public class WebActivity extends Activity {
     // The chip that takes you back to the native player after Back
     // The Native player button: on the site's own player (the biggest video, else the biggest frame), top left, scrolling with it;
     // a tab on the right edge when there is no player to sit on
-    // It carries the app's icon (drawn inline, so a site's image rules can't block it) and the name AnantPlayer.
+    // It carries the app's icon (drawn inline, so a site's image rules can't block it) and the name StreamHub Player.
     static final String ICON_SVG = "<svg width=\"20\" height=\"20\" viewBox=\"0 0 108 108\" style=\"display:block\"><defs>"
-        + "<linearGradient id=\"fpbg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#2E1A44\"/><stop offset=\"1\" stop-color=\"#110D18\"/></linearGradient>"
-        + "<linearGradient id=\"fppl\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#FF6A85\"/><stop offset=\"1\" stop-color=\"#FF2E58\"/></linearGradient></defs>"
-        + "<rect width=\"108\" height=\"108\" rx=\"26\" fill=\"url(#fpbg)\"/><circle cx=\"54\" cy=\"54\" r=\"30\" fill=\"none\" stroke=\"#FF3B5C\" stroke-opacity=\".4\" stroke-width=\"2.5\"/>"
+        + "<linearGradient id=\"fpbg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#0B1728\"/><stop offset=\"1\" stop-color=\"#08111F\"/></linearGradient>"
+        + "<linearGradient id=\"fppl\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#28B8FF\"/><stop offset=\"1\" stop-color=\"#8B5CF6\"/></linearGradient></defs>"
+        + "<rect width=\"108\" height=\"108\" rx=\"26\" fill=\"url(#fpbg)\"/><circle cx=\"54\" cy=\"54\" r=\"30\" fill=\"none\" stroke=\"#28B8FF\" stroke-opacity=\".4\" stroke-width=\"2.5\"/>"
         + "<path d=\"M46 38V70L72 54Z\" fill=\"url(#fppl)\" stroke=\"#FF3B5C\" stroke-width=\"6\" stroke-linejoin=\"round\"/></svg>";
-    static final String CHIP = "(()=>{if(document.getElementById('fp-native'))return;const b=document.createElement('button');b.id='fp-native';b.title='AnantPlayer';"
-        + "try{b.innerHTML=" + JSONObject.quote(ICON_SVG) + "+'<span>AnantPlayer</span>'}catch(x){b.textContent='\\u25B6 AnantPlayer'}"
-        + "b.style.cssText='z-index:2147483647;display:flex;align-items:center;gap:7px;padding:5px 11px 5px 6px;font:600 13px sans-serif;color:#fff;background:rgba(22,15,32,.92);border:1px solid #ff3b5c;border-radius:9px;box-shadow:0 2px 8px rgba(0,0,0,.45)';"
+    static final String CHIP = "(()=>{if(document.getElementById('fp-native'))return;const b=document.createElement('button');b.id='fp-native';b.title='StreamHub Player';"
+        + "try{b.innerHTML=" + JSONObject.quote(ICON_SVG) + "+'<span>StreamHub Player</span>'}catch(x){b.textContent='\\u25B6 StreamHub Player'}"
+        + "b.style.cssText='z-index:2147483647;display:flex;align-items:center;gap:7px;padding:5px 11px 5px 6px;font:600 13px sans-serif;color:#fff;background:rgba(11,23,40,.96);border:1px solid #ff3b5c;border-radius:9px;box-shadow:0 2px 8px rgba(0,0,0,.45)';"
         + "const big=sel=>{let best=null,area=0;for(const e of document.querySelectorAll(sel)){const r=e.getBoundingClientRect();if(r.width>=160&&r.height>=90&&r.width*r.height>area){area=r.width*r.height;best=r}}return best};"
         + "const place=()=>{const r=big('video')||big('iframe');const s=b.style;"
         + "if(r){s.position='absolute';s.top=(r.top+scrollY+8)+'px';s.left=(r.left+scrollX+8)+'px';s.right='';s.transform='';s.borderRadius='8px'}"
@@ -386,7 +386,10 @@ public class WebActivity extends Activity {
         // Anything the app drives from the start (the title's own page, a search for it, an episode) is behind the backdrop from the first frame
         if (playAfterLoad || pendingQuery != null || (show != null && show.series() && getIntent().getIntExtra("episode", 0) > 0))
             step(App.t(Warp.state == Warp.State.CONNECTING ? R.string.web_connecting_warp : R.string.web_step_loading), null);
-        if (!App.tv) addHomeButton(root);   // top right, where the player has it too; a TV has Menu, Back to home
+        if (!App.tv) {
+            addHomeButton(root);   // top right, where the player has it too
+            addCatalogScanButton(root);   // scan the currently open website page into its local catalog
+        }
         setContentView(root);
         // 90/120 Hz phones would repaint an animated page twice as often for no visible gain: ask for 60 (less heat)
         android.view.WindowManager.LayoutParams wp = getWindow().getAttributes();
@@ -1091,6 +1094,38 @@ public class WebActivity extends Activity {
     }
 
     /** A round Home button over the page (phones), top right where the player has it too. */
+    void addCatalogScanButton(FrameLayout root) {
+        int size = Home.dp(this, 40);
+        TextView b = new TextView(this);
+        b.setText("▦");
+        b.setTextColor(Home.ACCENT);
+        b.setTextSize(22);
+        b.setGravity(Gravity.CENTER);
+        b.setBackground(new android.graphics.drawable.GradientDrawable() {{
+            setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            setColor(0x99000000);
+        }});
+        b.setContentDescription("Pindai katalog halaman ini");
+        b.setOnClickListener(v -> {
+            String current = web == null ? null : web.getUrl();
+            if (current == null || !current.matches("(?i)^https?://.+")) current = siteUrl;
+            String rootUrl = getIntent().getStringExtra("siteRootUrl");
+            if (rootUrl == null || rootUrl.isEmpty()) rootUrl = siteUrl;
+            String id = getIntent().getStringExtra("siteId");
+            if (id == null || id.isEmpty()) id = CustomSites.id(rootUrl);
+            String file = getIntent().getStringExtra("indexFile");
+            if (file == null || file.isEmpty()) file = WebsiteIndexer.fileName(id);
+            Intent scan = new Intent(this, SiteScanActivity.class)
+                .putExtra("url", current).putExtra("name", site)
+                .putExtra("siteId", id).putExtra("indexFile", file).putExtra("siteRootUrl", rootUrl);
+            startActivity(scan);
+        });
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size, Gravity.TOP | Gravity.END);
+        lp.setMargins(0, Home.dp(this, 10) + (urlBar == null ? 0 : urlBar.getLayoutParams().height), Home.dp(this, 62), 0);
+        root.addView(b, lp);
+        FloatingButtonDrag.attach(b, root, "catalog_scan");
+    }
+
     void addHomeButton(FrameLayout root) {
         int size = Home.dp(this, 40);
         ImageView b = new ImageView(this);
@@ -1106,6 +1141,7 @@ public class WebActivity extends Activity {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size, Gravity.TOP | Gravity.END);
         lp.setMargins(0, Home.dp(this, 10) + (urlBar == null ? 0 : urlBar.getLayoutParams().height), Home.dp(this, 16), 0);
         root.addView(b, lp);
+        FloatingButtonDrag.attach(b, root, "home");
     }
 
     // An open pop-up on the page gets closed first (the page script knows); otherwise Back leaves as usual.

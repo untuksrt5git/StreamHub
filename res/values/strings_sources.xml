@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="sources_title">Sources</string>
-    <string name="sources_hint">AnantPlay comes with no sites or channels of its own. Add an index, then the sources you want from it.</string>
-    <string name="sources_index_name">AnantPlay index</string>
-    <string name="sources_index_help">The sources the AnantPlay project keeps up to date</string>
+    <string name="sources_hint">StreamHub comes with no sites or channels of its own. Add an index, then the sources you want from it.</string>
+    <string name="sources_index_name">StreamHub index</string>
+    <string name="sources_index_help">The sources the StreamHub project keeps up to date</string>
     <string name="sources_index_add">Add this index</string>
     <string name="sources_index_added">Index added</string>
     <string name="sources_added">Added</string>
@@ -14,7 +14,7 @@
     <string name="sources_unreachable">Could not load it. Select to try again</string>
     <string name="sources_unreachable_toast">Could not reach it, try again later</string>
     <string name="sources_added_toast">%1$s added</string>
-    <string name="sources_newer">Needs a newer AnantPlay</string>
+    <string name="sources_newer">Needs a newer StreamHub</string>
     <string name="sources_title_links">Title links</string>
     <string name="sources_type_sites">Sites</string>
     <string name="sources_type_playlist">Channels</string>
@@ -30,7 +30,7 @@
     <string name="sources_checking">Checking sources…</string>
     <string name="sources_updated">Sources updated</string>
     <string name="sources_current">Sources are up to date</string>
-    <string name="sources_notice_title">FMHYPlay is now AnantPlay</string>
+    <string name="sources_notice_title">FMHYPlay is now StreamHub</string>
     <string name="sources_notice_msg">Sites and channels now come from sources you pick in Settings, Sources. Yours were added for you.</string>
     <string name="sources_notice_open">Open Sources</string>
 </resources>

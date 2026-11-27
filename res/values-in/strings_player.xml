@@ -32,7 +32,7 @@
     <string name="player_full_screen">Layar penuh</string>
     <string name="player_subs_file">Subtitle %1$d (%2$s)</string>
     <string name="player_channel_offline">Saluran sedang offline (%1$s)</string>
-    <string name="player_cant_play">AnantPlayer tidak bisa memutar ini (%1$s), kembali ke halaman</string>
+    <string name="player_cant_play">StreamHub Player tidak bisa memutar ini (%1$s), kembali ke halaman</string>
     <string name="player_resumed_at">Dilanjutkan dari %1$s</string>
     <string name="player_live">LIVE</string>
     <string name="player_no_servers">Tidak ada daftar server di halaman ini</string>
@@ -88,9 +88,9 @@
     <string name="cast_channel">Transmisi</string>
     <string name="cast_ready">Siap menerima transmisi dari ponselmu</string>
     <string name="cast_sending_video">Mengirim video ke TV-mu</string>
-    <string name="cast_label_app">%1$s - AnantPlay (Disarankan)</string>
+    <string name="cast_label_app">%1$s - StreamHub (Disarankan)</string>
     <string name="cast_label_chromecast">%1$s - Chromecast</string>
-    <string name="cast_blocked">TV tidak membukanya. Di TV: AnantPlay, Setelan, Transmisikan ke TV ini, lalu izinkan</string>
+    <string name="cast_blocked">TV tidak membukanya. Di TV: StreamHub, Setelan, Transmisikan ke TV ini, lalu izinkan</string>
     <string name="cast_tv_cant_open">TV tidak bisa membuka video ini</string>
     <string name="cast_volume_down">Volume −</string>
     <string name="cast_volume_up">Volume +</string>
