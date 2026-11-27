@@ -71,7 +71,7 @@ public final class SiteScanActivity extends Activity {
     private String lastResourceFailure="";
     private String lastAutoScanUrl="";
     private final Handler handler=new Handler(Looper.getMainLooper());
-    private final Runnable scanWatchdog=()->{ if(scanning){scanning=false;scanGeneration++;if(autoCrawl&&!autoCurrentCategory.isEmpty())autoCategoryParserWarnings.add(autoCurrentCategory);if(status!=null)status.setText("Pemindaian melewati batas waktu. Sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);} };
+    private final Runnable scanWatchdog=()->{ if(scanning){if(web!=null)web.evaluateJavascript("window.scrollTo(0,window.__shScanOriginalY||0);'restored';",ignored->{});scanning=false;scanGeneration++;if(autoCrawl&&!autoCurrentCategory.isEmpty())autoCategoryParserWarnings.add(autoCurrentCategory);if(status!=null)status.setText("Pemindaian melewati batas waktu. Posisi halaman dipulihkan; sebagian gambar mungkin tertahan oleh situs atau jaringan. Coba lagi setelah halaman stabil.");if(autoCrawl)handler.postDelayed(this::discoverAndAdvanceAuto,700);} };
 
     private final String script =
         "(function(){try{" +
