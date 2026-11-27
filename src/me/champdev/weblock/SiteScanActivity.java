@@ -252,7 +252,7 @@ public final class SiteScanActivity extends Activity {
                     autoCategoryParserWarnings.add(autoCurrentCategory);
                     autoCompleted++;
                     status.setText("Kategori dilewati: HTTP "+code+" pada "+url+". URL ini tidak dimasukkan ke katalog.");
-                    handler.postDelayed(this::discoverAndAdvanceAuto,500);
+                    handler.postDelayed(SiteScanActivity.this::discoverAndAdvanceAuto,500);
                     return;
                 }
                 // Warm up lazy posters independently of the manual catalog scan.
